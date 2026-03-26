@@ -1,8 +1,8 @@
 const container = document.getElementById('countdown-container');
 const TOTAL_SECONDS = 15;
-const Z_SPACING = 3600; // 3x spacing for a massive corridor
-const X_SHIFT = -750; // 3x shifted to the side
-const Y_SHIFT = -300; // 3x vertical shift
+const Z_SPACING = 1200;
+const X_SHIFT = -250;
+const Y_SHIFT = -100;
 
 // 16 colors spanning the rainbow spectrum
 const rainbowColors = [
@@ -27,12 +27,11 @@ const rainbowColors = [
 function applyNeonStyle(div, color) {
     div.style.color = '#fff';
     div.style.textShadow = `
+        0 0 5px #fff,
         0 0 10px #fff,
-        0 0 20px #fff,
+        0 0 20px ${color},
         0 0 40px ${color},
-        0 0 80px ${color},
-        0 0 120px ${color},
-        0 0 200px ${color}
+        0 0 60px ${color}
     `;
     div.dataset.neon = color; // Save for particles
 }
@@ -129,15 +128,12 @@ function dissolve(el) {
         const ease = easeInOut(progress);
 
         // Z moves forward with eased motion
-        const zForward = ease * 3000;
+        const zForward = ease * 1000;
 
         // Curved path: drift sideways then back (sine arc)
         const xDrift = Math.sin(progress * Math.PI) * 200;
         // Gentle upward arc
         const yDrift = -Math.sin(progress * Math.PI) * 120;
-
-        // Scale breathes up then settles
-        const scale = 1 + Math.sin(progress * Math.PI * 0.8) * 0.6;
 
         // Slight rotation wobble for organic feel
         const rotateZ = Math.sin(progress * Math.PI * 1.5) * 8;
@@ -150,15 +146,14 @@ function dissolve(el) {
         const neonColor = el.dataset.neon || '#0ff';
         const glowStrength = opacity;
         el.style.textShadow = `
+            0 0 ${5 * glowStrength}px #fff,
             0 0 ${10 * glowStrength}px #fff,
-            0 0 ${20 * glowStrength}px #fff,
+            0 0 ${20 * glowStrength}px ${neonColor},
             0 0 ${40 * glowStrength}px ${neonColor},
-            0 0 ${80 * glowStrength}px ${neonColor},
-            0 0 ${120 * glowStrength}px ${neonColor},
-            0 0 ${200 * glowStrength}px ${neonColor}
+            0 0 ${60 * glowStrength}px ${neonColor}
         `;
 
-        el.style.transform = `${currentTransform} translate3d(${xDrift}px, ${yDrift}px, ${zForward}px) scale(${scale}) rotateZ(${rotateZ}deg) rotateY(${rotateY}deg)`;
+        el.style.transform = `${currentTransform} translate3d(${xDrift}px, ${yDrift}px, ${zForward}px) rotateZ(${rotateZ}deg) rotateY(${rotateY}deg)`;
         el.style.opacity = opacity;
 
         if (progress < 1) {
