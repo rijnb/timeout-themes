@@ -18,9 +18,7 @@ function createNumbers() {
 let current = TOTAL_SECONDS;
 function tick() {
     if (current < 0) {
-        // Option: loop or stop
-        // current = TOTAL_SECONDS;
-        // createNumbers();
+        // Stop the countdown
         return;
     }
 
@@ -34,6 +32,14 @@ function tick() {
 
     if (current >= 0) {
         setTimeout(tick, 1000);
+    } else {
+        // Special case for zero: also vaporize it after 1 second
+        setTimeout(() => {
+            const zeroNum = document.getElementById('num-0');
+            if (zeroNum) {
+                vaporize(zeroNum);
+            }
+        }, 1000);
     }
 }
 
