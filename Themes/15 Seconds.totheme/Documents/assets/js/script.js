@@ -1,6 +1,36 @@
 const container = document.getElementById('countdown-container');
 const TOTAL_SECONDS = 15;
-const Z_SPACING = 300;
+const Z_SPACING = 200; // Smaller spacing to fit corridor view
+const X_SHIFT = 60; // Shift to the side
+const Y_SHIFT = 30; // Shift slightly down
+
+const neonColors = [
+    '#00ffff', // cyan
+    '#ff00ff', // magenta
+    '#00ff00', // lime
+    '#ffff00', // yellow
+    '#ff3300', // neon red
+    '#33ff00', // electric green
+    '#ff9900', // neon orange
+    '#cc00ff'  // neon purple
+];
+
+function getRandomNeon() {
+    return neonColors[Math.floor(Math.random() * neonColors.length)];
+}
+
+function applyNeonStyle(div, color) {
+    div.style.color = '#fff';
+    div.style.textShadow = `
+        0 0 10px #fff,
+        0 0 20px #fff,
+        0 0 40px ${color},
+        0 0 80px ${color},
+        0 0 120px ${color},
+        0 0 200px ${color}
+    `;
+    div.dataset.neon = color; // Save for particles
+}
 
 function createNumbers() {
     for (let i = 0; i <= TOTAL_SECONDS; i++) {
@@ -8,9 +38,16 @@ function createNumbers() {
         div.className = 'number';
         div.textContent = i;
         div.id = `num-${i}`;
-        // Initial stack: further numbers have negative translateZ
-        const initialZ = -(TOTAL_SECONDS - i) * Z_SPACING;
-        div.style.transform = `translate(-50%, -50%) translateZ(${initialZ}px)`;
+
+        applyNeonStyle(div, getRandomNeon());
+
+        // Corridor positioning
+        const offset = TOTAL_SECONDS - i;
+        const z = -offset * Z_SPACING;
+        const x = offset * X_SHIFT;
+        const y = offset * Y_SHIFT;
+
+        div.style.transform = `translate(-50%, -50%) translate3d(${x}px, ${y}px, ${z}px)`;
         container.appendChild(div);
     }
 }
@@ -48,8 +85,12 @@ function updateStack() {
     numbers.forEach(num => {
         const val = parseInt(num.textContent);
         if (val <= current) {
-            const z = -(current - val) * Z_SPACING;
-            num.style.transform = `translate(-50%, -50%) translateZ(${z}px)`;
+            const offset = current - val;
+            const z = -offset * Z_SPACING;
+            const x = offset * X_SHIFT;
+            const y = offset * Y_SHIFT;
+
+            num.style.transform = `translate(-50%, -50%) translate3d(${x}px, ${y}px, ${z}px)`;
             num.style.opacity = '1';
         }
     });
@@ -57,7 +98,8 @@ function updateStack() {
 
 function vaporize(el) {
     const rect = el.getBoundingClientRect();
-    const count = 100; // More particles for better effect
+    const count = 120; // Increased
+    const neonColor = el.dataset.neon || '#0ff';
 
     // Position of the number in screen coordinates
     const centerX = rect.left + rect.width / 2;
@@ -67,12 +109,16 @@ function vaporize(el) {
         const p = document.createElement('div');
         p.className = 'particle';
 
+        // Match particle color to number color
+        p.style.background = neonColor;
+        p.style.boxShadow = `0 0 10px ${neonColor}`;
+
         // Randomly scatter within the number's bounding box
         p.style.left = (centerX + (Math.random() - 0.5) * rect.width) + 'px';
         p.style.top = (centerY + (Math.random() - 0.5) * rect.height) + 'px';
 
         const angle = Math.random() * Math.PI * 2;
-        const velocity = Math.random() * 15 + 5;
+        const velocity = Math.random() * 20 + 8; // More explosive
         const vx = Math.cos(angle) * velocity;
         const vy = Math.sin(angle) * velocity;
 
