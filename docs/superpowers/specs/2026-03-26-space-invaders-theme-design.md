@@ -84,7 +84,8 @@ All CSS and JS embedded inline (no external dependencies except optional Google 
 - End sequence: GAME OVER text after last enemy destroyed
 
 ### Rendering
-- HTML5 `<canvas>` element, full viewport
+- HTML5 `<canvas>` element, centered in a container
+- 60% of the viewport width and height
 - Pixel art drawn with canvas 2D API (rectangles for sprites)
 - No external image assets — all sprites drawn programmatically
 
