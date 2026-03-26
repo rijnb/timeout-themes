@@ -2,6 +2,9 @@
 <html lang="">
 <head>
   <meta charset="utf-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <title>Space Invaders</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -27,7 +30,7 @@
       max-width: 100%;
       max-height: 100%;
       object-fit: contain;
-      image-rendering: pixelated;
+      image-rendering: auto;
     }
   </style>
 </head>
@@ -240,22 +243,179 @@
       }
     }
 
-    function drawSprite(x, y, type, frame, color) {
-      const rows = SPRITES[type][frame];
-      const pw = ENEMY_W / 11;
-      const ph = ENEMY_H / 8;
-      ctx.fillStyle = color;
-      rows.forEach((row, ry) => {
-        for (let cx = 0; cx < row.length; cx++) {
-          if (row[cx] === '1') {
-            ctx.fillRect(
-              Math.round(x + cx * pw),
-              Math.round(y + ry * ph),
-              Math.ceil(pw), Math.ceil(ph)
-            );
-          }
+    // ─── High-Resolution Sprite Rendering ─────────────────────────────────
+    // Cache off-screen canvases for each sprite type/frame/color combo
+    const spriteCache = {};
+
+    function getSpriteKey(type, frame, color) {
+      return type + frame + color;
+    }
+
+    function createHiResSprite(type, frame, color, w, h) {
+      const oc = document.createElement('canvas');
+      oc.width = w * 2; oc.height = h * 2; // 2x for crisp rendering
+      const c = oc.getContext('2d');
+      c.scale(2, 2);
+
+      const cx = w / 2, cy = h / 2;
+
+      // Parse color for gradient creation
+      const r = parseInt(color.slice(1,3), 16);
+      const g = parseInt(color.slice(3,5), 16);
+      const b = parseInt(color.slice(5,7), 16);
+      const bright = `rgb(${Math.min(255,r+80)},${Math.min(255,g+80)},${Math.min(255,b+80)})`;
+      const dark = `rgb(${Math.floor(r*0.4)},${Math.floor(g*0.4)},${Math.floor(b*0.4)})`;
+
+      // Outer glow
+      c.shadowColor = color;
+      c.shadowBlur = 8;
+
+      if (type === 'A') { // Crab
+        const legSpread = frame === 0 ? 1 : -1;
+        // Body
+        const grad = c.createRadialGradient(cx, cy-2, 2, cx, cy-2, w*0.45);
+        grad.addColorStop(0, bright);
+        grad.addColorStop(0.6, color);
+        grad.addColorStop(1, dark);
+        c.fillStyle = grad;
+        c.beginPath();
+        c.ellipse(cx, cy - 2, w * 0.42, h * 0.32, 0, 0, Math.PI * 2);
+        c.fill();
+        // Eyes
+        c.fillStyle = '#ffffff';
+        c.beginPath();
+        c.ellipse(cx - 7, cy - 6, 4, 5, 0, 0, Math.PI * 2);
+        c.ellipse(cx + 7, cy - 6, 4, 5, 0, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = '#111';
+        c.beginPath();
+        c.arc(cx - 6, cy - 5, 2, 0, Math.PI * 2);
+        c.arc(cx + 8, cy - 5, 2, 0, Math.PI * 2);
+        c.fill();
+        // Claws/antennae
+        c.shadowBlur = 4;
+        c.strokeStyle = color;
+        c.lineWidth = 2.5;
+        c.lineCap = 'round';
+        c.beginPath();
+        c.moveTo(cx - 14, cy - 8);
+        c.lineTo(cx - 18, cy - 16 + legSpread * 3);
+        c.lineTo(cx - 14, cy - 14 + legSpread * 2);
+        c.moveTo(cx + 14, cy - 8);
+        c.lineTo(cx + 18, cy - 16 + legSpread * 3);
+        c.lineTo(cx + 14, cy - 14 + legSpread * 2);
+        c.stroke();
+        // Legs
+        c.lineWidth = 2;
+        for (let i = -1; i <= 1; i += 2) {
+          c.beginPath();
+          c.moveTo(cx + i * 10, cy + 6);
+          c.lineTo(cx + i * 14, cy + 12 + legSpread * i * 2);
+          c.stroke();
+          c.beginPath();
+          c.moveTo(cx + i * 5, cy + 7);
+          c.lineTo(cx + i * 8, cy + 13 - legSpread * i * 2);
+          c.stroke();
         }
-      });
+      } else if (type === 'B') { // Squid
+        const tentacleWave = frame === 0 ? 1 : -1;
+        // Head (dome shape)
+        const grad = c.createRadialGradient(cx, cy - 4, 2, cx, cy - 4, w * 0.4);
+        grad.addColorStop(0, bright);
+        grad.addColorStop(0.5, color);
+        grad.addColorStop(1, dark);
+        c.fillStyle = grad;
+        c.beginPath();
+        c.moveTo(cx - w * 0.35, cy + 2);
+        c.quadraticCurveTo(cx - w * 0.38, cy - 12, cx, cy - 14);
+        c.quadraticCurveTo(cx + w * 0.38, cy - 12, cx + w * 0.35, cy + 2);
+        c.closePath();
+        c.fill();
+        // Eyes
+        c.fillStyle = '#ffffff';
+        c.beginPath();
+        c.ellipse(cx - 6, cy - 5, 3.5, 4.5, 0, 0, Math.PI * 2);
+        c.ellipse(cx + 6, cy - 5, 3.5, 4.5, 0, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = '#111';
+        c.beginPath();
+        c.arc(cx - 5, cy - 4, 1.8, 0, Math.PI * 2);
+        c.arc(cx + 7, cy - 4, 1.8, 0, Math.PI * 2);
+        c.fill();
+        // Tentacles
+        c.shadowBlur = 4;
+        c.strokeStyle = color;
+        c.lineWidth = 2.2;
+        c.lineCap = 'round';
+        const tentCount = 4;
+        for (let i = 0; i < tentCount; i++) {
+          const tx = cx - 10 + i * 7;
+          const wave = tentacleWave * (i % 2 === 0 ? 3 : -3);
+          c.beginPath();
+          c.moveTo(tx, cy + 2);
+          c.quadraticCurveTo(tx + wave, cy + 9, tx + wave * 0.5, cy + 14);
+          c.stroke();
+        }
+      } else { // type C — Octopus
+        const wobble = frame === 0 ? 1 : -1;
+        // Rounded body
+        const grad = c.createRadialGradient(cx, cy - 1, 3, cx, cy - 1, w * 0.44);
+        grad.addColorStop(0, bright);
+        grad.addColorStop(0.5, color);
+        grad.addColorStop(1, dark);
+        c.fillStyle = grad;
+        c.beginPath();
+        c.ellipse(cx, cy - 3, w * 0.40, h * 0.36, 0, 0, Math.PI * 2);
+        c.fill();
+        // Eyes
+        c.fillStyle = '#ffffff';
+        c.beginPath();
+        c.ellipse(cx - 8, cy - 4, 4, 5, 0, 0, Math.PI * 2);
+        c.ellipse(cx + 8, cy - 4, 4, 5, 0, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = '#111';
+        c.beginPath();
+        c.arc(cx - 7, cy - 3, 2.2, 0, Math.PI * 2);
+        c.arc(cx + 9, cy - 3, 2.2, 0, Math.PI * 2);
+        c.fill();
+        // Mouth
+        c.strokeStyle = dark;
+        c.lineWidth = 1.5;
+        c.beginPath();
+        c.arc(cx, cy + 3, 4, 0, Math.PI);
+        c.stroke();
+        // Tentacles (8 wavy legs)
+        c.shadowBlur = 3;
+        c.strokeStyle = color;
+        c.lineWidth = 2;
+        c.lineCap = 'round';
+        for (let i = 0; i < 5; i++) {
+          const tx = cx - 14 + i * 7;
+          const wave = wobble * (i % 2 === 0 ? 4 : -4);
+          c.beginPath();
+          c.moveTo(tx, cy + 7);
+          c.quadraticCurveTo(tx + wave, cy + 13, tx + wave * 1.2, cy + 14);
+          c.stroke();
+        }
+      }
+
+      // Highlight spot on body
+      c.shadowBlur = 0;
+      c.fillStyle = 'rgba(255,255,255,0.25)';
+      c.beginPath();
+      c.ellipse(cx - 4, cy - 8, 3, 2, -0.5, 0, Math.PI * 2);
+      c.fill();
+
+      return oc;
+    }
+
+    function drawSprite(x, y, type, frame, color) {
+      const key = getSpriteKey(type, frame, color);
+      if (!spriteCache[key]) {
+        spriteCache[key] = createHiResSprite(type, frame, color, ENEMY_W, ENEMY_H);
+      }
+      const oc = spriteCache[key];
+      ctx.drawImage(oc, 0, 0, oc.width, oc.height, x, y, ENEMY_W, ENEMY_H);
     }
 
     function renderEnemies() {
@@ -426,30 +586,108 @@
       player.x = Math.max(10, Math.min(W - PLAYER_W - 10, player.x));
     }
 
+    // Pre-render player ship canvases
+    const playerCache = {};
+
+    function createHiResPlayer(color, w, h) {
+      const oc = document.createElement('canvas');
+      oc.width = w * 2; oc.height = h * 2;
+      const c = oc.getContext('2d');
+      c.scale(2, 2);
+
+      const cx = w / 2, cy = h / 2;
+      const r = parseInt(color.slice(1,3), 16);
+      const g = parseInt(color.slice(3,5), 16);
+      const b = parseInt(color.slice(5,7), 16);
+      const bright = `rgb(${Math.min(255,r+60)},${Math.min(255,g+60)},${Math.min(255,b+60)})`;
+      const dark = `rgb(${Math.floor(r*0.5)},${Math.floor(g*0.5)},${Math.floor(b*0.5)})`;
+
+      // Engine glow
+      c.shadowColor = '#00aaff';
+      c.shadowBlur = 10;
+
+      // Ship body
+      const grad = c.createLinearGradient(cx, 0, cx, h);
+      grad.addColorStop(0, bright);
+      grad.addColorStop(0.4, color);
+      grad.addColorStop(1, dark);
+      c.fillStyle = grad;
+
+      // Main hull
+      c.beginPath();
+      c.moveTo(cx, 1);           // nose tip
+      c.lineTo(cx + 6, 6);       // right of nose
+      c.lineTo(cx + 8, 10);      // right shoulder
+      c.lineTo(w - 2, h - 4);    // right wing tip
+      c.lineTo(w - 2, h);        // right wing bottom
+      c.lineTo(cx + 4, h - 3);   // right engine
+      c.lineTo(cx - 4, h - 3);   // left engine
+      c.lineTo(2, h);            // left wing bottom
+      c.lineTo(2, h - 4);        // left wing tip
+      c.lineTo(cx - 8, 10);      // left shoulder
+      c.lineTo(cx - 6, 6);       // left of nose
+      c.closePath();
+      c.fill();
+
+      // Cockpit
+      c.shadowBlur = 0;
+      const cockpitGrad = c.createRadialGradient(cx, 10, 1, cx, 10, 6);
+      cockpitGrad.addColorStop(0, '#88ddff');
+      cockpitGrad.addColorStop(0.7, '#2288cc');
+      cockpitGrad.addColorStop(1, '#115577');
+      c.fillStyle = cockpitGrad;
+      c.beginPath();
+      c.ellipse(cx, 10, 4, 5, 0, 0, Math.PI * 2);
+      c.fill();
+
+      // Wing details (panel lines)
+      c.strokeStyle = 'rgba(255,255,255,0.2)';
+      c.lineWidth = 0.8;
+      c.beginPath();
+      c.moveTo(cx - 3, h - 5);
+      c.lineTo(6, h - 2);
+      c.moveTo(cx + 3, h - 5);
+      c.lineTo(w - 6, h - 2);
+      c.stroke();
+
+      // Engine nozzles glow
+      c.fillStyle = '#00ccff';
+      c.shadowColor = '#00ccff';
+      c.shadowBlur = 6;
+      c.beginPath();
+      c.ellipse(cx - 5, h - 1, 2.5, 1.5, 0, 0, Math.PI * 2);
+      c.fill();
+      c.beginPath();
+      c.ellipse(cx + 5, h - 1, 2.5, 1.5, 0, 0, Math.PI * 2);
+      c.fill();
+
+      // Highlight
+      c.shadowBlur = 0;
+      c.fillStyle = 'rgba(255,255,255,0.15)';
+      c.beginPath();
+      c.ellipse(cx - 3, 8, 3, 6, -0.3, 0, Math.PI * 2);
+      c.fill();
+
+      return oc;
+    }
+
     function renderPlayer() {
       if (gamePhase === 'gameover') return;
-      const pw = PLAYER_W / 11;
-      const ph = PLAYER_H / 6;
 
-      // Color based on recharge state
-      ctx.fillStyle = (rechargeTimer > 0) ? '#4488ff' : COLOR_PLAYER;
+      const color = (rechargeTimer > 0) ? '#4488ff' : COLOR_PLAYER;
+      if (!playerCache[color]) {
+        playerCache[color] = createHiResPlayer(color, PLAYER_W, PLAYER_H);
+      }
+      const oc = playerCache[color];
+      ctx.drawImage(oc, 0, 0, oc.width, oc.height, player.x, player.y, PLAYER_W, PLAYER_H);
 
-      PLAYER_SPRITE.forEach((row, ry) => {
-        for (let cx = 0; cx < row.length; cx++) {
-          if (row[cx] === '1') {
-            ctx.fillRect(
-              Math.round(player.x + cx * pw),
-              Math.round(player.y + ry * ph),
-              Math.ceil(pw), Math.ceil(ph)
-            );
-          }
-        }
-      });
-
-      // Small recharging bar
+      // Recharge bar with gradient
       if (rechargeTimer > 0) {
         const barW = (rechargeTimer / RECHARGE_DELAY) * PLAYER_W;
-        ctx.fillStyle = '#ff4444';
+        const grad = ctx.createLinearGradient(player.x, 0, player.x + barW, 0);
+        grad.addColorStop(0, '#ff2222');
+        grad.addColorStop(1, '#ff6644');
+        ctx.fillStyle = grad;
         ctx.fillRect(player.x, player.y + PLAYER_H + 5, barW, 3);
       }
     }
@@ -476,9 +714,48 @@
     function renderBarriers() {
       barriers.forEach(bar => {
         bar.blocks.forEach(bl => {
-          ctx.globalAlpha = bl.hp / 3;
-          ctx.fillStyle = COLOR_BARRIER;
-          ctx.fillRect(bar.x + bl.c * 10, bar.y + bl.r * 8, 9, 7);
+          const alpha = bl.hp / 3;
+          if (alpha <= 0) return;
+          ctx.globalAlpha = alpha;
+          const bx = bar.x + bl.c * 10;
+          const by = bar.y + bl.r * 8;
+          // Gradient block with rounded corners
+          const grad = ctx.createLinearGradient(bx, by, bx, by + 7);
+          grad.addColorStop(0, '#22cc44');
+          grad.addColorStop(1, '#006622');
+          ctx.fillStyle = grad;
+          // Rounded rect
+          const radius = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(bx + radius, by);
+          ctx.lineTo(bx + 9 - radius, by);
+          ctx.arcTo(bx + 9, by, bx + 9, by + radius, radius);
+          ctx.lineTo(bx + 9, by + 7 - radius);
+          ctx.arcTo(bx + 9, by + 7, bx + 9 - radius, by + 7, radius);
+          ctx.lineTo(bx + radius, by + 7);
+          ctx.arcTo(bx, by + 7, bx, by + 7 - radius, radius);
+          ctx.lineTo(bx, by + radius);
+          ctx.arcTo(bx, by, bx + radius, by, radius);
+          ctx.closePath();
+          ctx.fill();
+          // Damage cracks when hp < 3
+          if (bl.hp < 3) {
+            ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(bx + 2, by + 1);
+            ctx.lineTo(bx + 5, by + 4);
+            ctx.lineTo(bx + 3, by + 6);
+            ctx.stroke();
+          }
+          if (bl.hp < 2) {
+            ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(bx + 7, by + 2);
+            ctx.lineTo(bx + 4, by + 5);
+            ctx.stroke();
+          }
         });
       });
       ctx.globalAlpha = 1;
@@ -628,9 +905,22 @@
     }
 
     function renderBullets() {
-      ctx.fillStyle = COLOR_BULLET;
       bullets.forEach(b => {
-        ctx.fillRect(Math.round(b.x - 2), Math.round(b.y - 10), 4, 18);
+        const bx = Math.round(b.x), by = Math.round(b.y);
+        // Glow
+        ctx.shadowColor = '#88ccff';
+        ctx.shadowBlur = 10;
+        // Bright core
+        const grad = ctx.createLinearGradient(bx, by - 10, bx, by + 8);
+        grad.addColorStop(0, 'rgba(136,204,255,0.2)');
+        grad.addColorStop(0.3, '#ffffff');
+        grad.addColorStop(0.7, '#88ccff');
+        grad.addColorStop(1, 'rgba(136,204,255,0.1)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.ellipse(bx, by - 1, 2.5, 9, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
       });
     }
 
@@ -775,12 +1065,28 @@
     }
 
     function renderBombs() {
-      ctx.fillStyle = COLOR_BOMB;
       bombs.forEach(b => {
+        ctx.shadowColor = '#ff4444';
+        ctx.shadowBlur = 8;
+        // Zigzag energy bolt
+        ctx.strokeStyle = '#ff6644';
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        const bx = Math.round(b.x), by = Math.round(b.y);
         for (let i = 0; i < 4; i++) {
           const offset = (i % 2 === b.frame) ? -3 : 3;
-          ctx.fillRect(Math.round(b.x + offset - 2), Math.round(b.y + i * 5 - 10), 4, 5);
+          const py = by + i * 5 - 10;
+          if (i === 0) ctx.moveTo(bx + offset, py);
+          else ctx.lineTo(bx + offset, py);
         }
+        ctx.stroke();
+        // Bright tip
+        ctx.fillStyle = '#ffaa44';
+        ctx.beginPath();
+        ctx.arc(bx, by + 8, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
       });
     }
 
@@ -894,33 +1200,89 @@
     }
 
     function renderUFOBombs() {
-      ctx.fillStyle = '#ff88ff';
       ufoBombs.forEach(b => {
+        ctx.shadowColor = '#ff44ff';
+        ctx.shadowBlur = 8;
+        ctx.strokeStyle = '#ff88ff';
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        const bx = Math.round(b.x), by = Math.round(b.y);
         for (let i = 0; i < 4; i++) {
           const offset = (i % 2 === 0) ? -3 : 3;
-          ctx.fillRect(Math.round(b.x + offset - 2), Math.round(b.y + i * 5 - 10), 4, 5);
+          const py = by + i * 5 - 10;
+          if (i === 0) ctx.moveTo(bx + offset, py);
+          else ctx.lineTo(bx + offset, py);
         }
+        ctx.stroke();
+        ctx.fillStyle = '#ffaaff';
+        ctx.beginPath();
+        ctx.arc(bx, by + 8, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
       });
     }
 
     function renderUFO() {
       if (!ufo) return;
-      ctx.fillStyle = COLOR_UFO;
-      // Saucer body
+      const ux = ufo.x + 22, uy = ufo.y + 10;
+
+      // Outer glow
+      ctx.shadowColor = '#ff4444';
+      ctx.shadowBlur = 16;
+
+      // Saucer body with metallic gradient
+      const bodyGrad = ctx.createRadialGradient(ux, uy - 2, 4, ux, uy, 22);
+      bodyGrad.addColorStop(0, '#ff6666');
+      bodyGrad.addColorStop(0.5, '#cc2222');
+      bodyGrad.addColorStop(1, '#661111');
+      ctx.fillStyle = bodyGrad;
       ctx.beginPath();
-      ctx.ellipse(ufo.x + 22, ufo.y + 10, 22, 9, 0, 0, Math.PI * 2);
+      ctx.ellipse(ux, uy, 22, 9, 0, 0, Math.PI * 2);
       ctx.fill();
-      // Dome
+
+      // Dome with glass gradient
+      ctx.shadowBlur = 8;
+      const domeGrad = ctx.createRadialGradient(ux - 2, uy - 5, 1, ux, uy - 2, 11);
+      domeGrad.addColorStop(0, '#ffaaaa');
+      domeGrad.addColorStop(0.4, '#ee4444');
+      domeGrad.addColorStop(1, '#881111');
+      ctx.fillStyle = domeGrad;
       ctx.beginPath();
-      ctx.ellipse(ufo.x + 22, ufo.y + 5, 11, 7, 0, 0, Math.PI * 2);
+      ctx.ellipse(ux, uy - 3, 11, 8, 0, 0, Math.PI * 2);
       ctx.fill();
-      // Windows
-      ctx.fillStyle = '#ffaaaa';
+
+      // Dome highlight
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(ux - 3, uy - 7, 4, 2.5, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Windows — glowing circles
       for (let i = 0; i < 3; i++) {
+        const wx = ufo.x + 12 + i * 10;
+        ctx.shadowColor = '#ffeeaa';
+        ctx.shadowBlur = 6;
+        const wGrad = ctx.createRadialGradient(wx, uy, 0.5, wx, uy, 3);
+        wGrad.addColorStop(0, '#ffffff');
+        wGrad.addColorStop(0.5, '#ffeeaa');
+        wGrad.addColorStop(1, '#cc8844');
+        ctx.fillStyle = wGrad;
         ctx.beginPath();
-        ctx.arc(ufo.x + 12 + i * 10, ufo.y + 10, 2, 0, Math.PI * 2);
+        ctx.arc(wx, uy, 2.5, 0, Math.PI * 2);
         ctx.fill();
       }
+
+      // Bottom rim highlight
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = 'rgba(255,150,150,0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(ux, uy + 2, 20, 7, 0, 0.1, Math.PI - 0.1);
+      ctx.stroke();
+
+      ctx.shadowBlur = 0;
     }
 
     // --- Game Phase & GAME OVER ---
@@ -945,32 +1307,42 @@
     function renderGameOver() {
       if (gamePhase !== 'gameover') return;
 
-      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      ctx.fillStyle = 'rgba(0,0,0,0.80)';
       ctx.fillRect(0, 0, W, H);
 
       // Blink: visible 650ms, hidden 150ms out of 800ms cycle
       const t = gameOverTimer % 800;
       if (t > 150) {
-        // Shadow
-        ctx.font = 'bold 80px "Courier New", Courier, monospace';
+        ctx.font = 'bold 120px "Share Tech Mono", "Courier New", monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#003300';
-        ctx.fillText('GAME OVER', W / 2 + 5, H / 2 + 5);
-        // Main text
+
+        // Glow effect
+        ctx.shadowColor = '#00ff00';
+        ctx.shadowBlur = 40;
         ctx.fillStyle = COLOR_GAMEOVER;
         ctx.fillText('GAME OVER', W / 2, H / 2);
 
+        // Sharper overlay
+        ctx.shadowBlur = 14;
+        ctx.fillText('GAME OVER', W / 2, H / 2);
+
         // Subtitle
-        ctx.font = '22px "Courier New", Courier, monospace';
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = 10;
+        ctx.font = '34px "Share Tech Mono", "Courier New", monospace';
         ctx.fillStyle = '#ffffff';
-        ctx.fillText('ALL INVADERS DESTROYED', W / 2, H / 2 + 72);
+        ctx.fillText('ALL INVADERS DESTROYED', W / 2, H / 2 + 95);
 
         // Score
+        ctx.shadowColor = '#00ff00';
+        ctx.shadowBlur = 8;
         const score = TOTAL_ENEMIES * 10;
-        ctx.font = '18px "Courier New", Courier, monospace';
+        ctx.font = '28px "Share Tech Mono", "Courier New", monospace';
         ctx.fillStyle = COLOR_GAMEOVER;
-        ctx.fillText(`SCORE: ${score}`, W / 2, H / 2 + 108);
+        ctx.fillText(`SCORE: ${score}`, W / 2, H / 2 + 145);
+
+        ctx.shadowBlur = 0;
       }
     }
 
@@ -982,8 +1354,10 @@
       const timeLeft = Math.max(0, TOTAL_DURATION - elapsed);
       const formattedTime = formatTime(timeLeft);
 
-      ctx.fillStyle = COLOR_ENEMY_A;
-      ctx.font = '15px "Courier New", Courier, monospace';
+      ctx.shadowColor = '#ff4444';
+      ctx.shadowBlur = 4;
+      ctx.fillStyle = '#ff6644';
+      ctx.font = 'bold 24px "Share Tech Mono", "Courier New", monospace';
 
       // Left: Score
       ctx.textAlign = 'left';
@@ -997,27 +1371,34 @@
       if (gamePhase !== 'gameover') {
         // Right: Invaders count
         ctx.textAlign = 'right';
-        ctx.fillText('INVADERS: ' + enemies.filter(e => e.alive).length, W - 18, 8);
+        ctx.fillText('INVADERS: ' + aliveEnemies.length, W - 18, 8);
 
         // Bottom Left: Lives
         ctx.textAlign = 'left';
-        ctx.fillText('LIVES: 3', 18, H - 22);
+        ctx.fillText('LIVES: 3', 18, H - 26);
       }
+      ctx.shadowBlur = 0;
     }
 
-    // --- Scanlines ---
+    // --- Subtle scanlines (lighter for hi-res look) ---
     function renderScanlines() {
-      ctx.fillStyle = 'rgba(0,0,0,0.07)';
-      for (let y = 0; y < H; y += 4) {
-        ctx.fillRect(0, y, W, 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.04)';
+      for (let y = 0; y < H; y += 3) {
+        ctx.fillRect(0, y, W, 1);
       }
     }
 
     // ─── GROUND Line ───
     function renderGround() {
       if (gamePhase === 'gameover') return;
-      ctx.fillStyle = '#00aa00';
+      const grad = ctx.createLinearGradient(0, H - 37, 0, H - 34);
+      grad.addColorStop(0, '#00cc44');
+      grad.addColorStop(1, '#005522');
+      ctx.fillStyle = grad;
       ctx.fillRect(0, H - 36, W, 2);
+      // Subtle glow
+      ctx.fillStyle = 'rgba(0,170,0,0.15)';
+      ctx.fillRect(0, H - 38, W, 6);
     }
 
     // ─── Game Loop ────────────────────────────────────────────────────────────
