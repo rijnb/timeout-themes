@@ -1,0 +1,44 @@
+body {
+    margin: 0;
+    background: #000;
+    overflow: hidden;
+    color: #fff;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+#scene {
+    perspective: 1000px;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+#countdown-container {
+    position: relative;
+    transform-style: preserve-3d;
+}
+.number {
+    position: absolute;
+    font-size: 25rem;
+    font-weight: 900;
+    transform: translate(-50%, -50%);
+    transition: transform 0.5s ease-in-out, opacity 0.5s;
+    text-shadow:
+        0 0 10px #fff,
+        0 0 20px #fff,
+        0 0 40px #0ff,
+        0 0 80px #0ff,
+        0 0 120px #0ff,
+        0 0 200px #0ff;
+    color: #fff;
+    user-select: none;
+}
+.particle {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background: #0ff;
+    border-radius: 50%;
+    box-shadow: 0 0 10px #0ff;
+    pointer-events: none;
+}
