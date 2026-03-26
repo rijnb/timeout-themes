@@ -69,7 +69,7 @@ function tick() {
 
     const frontNum = document.getElementById(`num-${current}`);
     if (frontNum) {
-        vaporize(frontNum);
+        dissolve(frontNum);
     }
 
     current--;
@@ -82,7 +82,7 @@ function tick() {
         setTimeout(() => {
             const zeroNum = document.getElementById('num-0');
             if (zeroNum) {
-                vaporize(zeroNum);
+                dissolve(zeroNum);
             }
         }, 1000);
     }
@@ -104,63 +104,73 @@ function updateStack() {
     });
 }
 
-function vaporize(el) {
-    const rect = el.getBoundingClientRect();
-    const count = 120; // Increased
-    const neonColor = el.dataset.neon || '#0ff';
+// Ease-in-out cubic
+function easeInOut(t) {
+    return t < 0.5
+        ? 4 * t * t * t
+        : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
 
-    // Position of the number in screen coordinates
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
+// Slow fade-in at start, fast fade-out at end
+function easeFadeOut(t) {
+    return 1 - t * t * t;
+}
 
-    for (let i = 0; i < count; i++) {
-        const p = document.createElement('div');
-        p.className = 'particle';
+function dissolve(el) {
+    const duration = 900; // ms
+    const startTime = performance.now();
 
-        // Match particle color to number color
-        p.style.background = neonColor;
-        p.style.boxShadow = `0 0 10px ${neonColor}`;
+    el.style.transition = 'none';
 
-        // Randomly scatter within the number's bounding box
-        p.style.left = (centerX + (Math.random() - 0.5) * rect.width) + 'px';
-        p.style.top = (centerY + (Math.random() - 0.5) * rect.height) + 'px';
+    const currentTransform = el.style.transform;
 
-        const angle = Math.random() * Math.PI * 2;
-        const velocity = Math.random() * 20 + 8; // More explosive
-        const vx = Math.cos(angle) * velocity;
-        const vy = Math.sin(angle) * velocity;
+    function animate(now) {
+        const progress = Math.min((now - startTime) / duration, 1);
+        const ease = easeInOut(progress);
 
-        document.body.appendChild(p);
+        // Z moves forward with eased motion
+        const zForward = ease * 3000;
 
-        let opacity = 1;
-        const animate = () => {
-            const currentLeft = parseFloat(p.style.left);
-            const currentTop = parseFloat(p.style.top);
+        // Curved path: drift sideways then back (sine arc)
+        const xDrift = Math.sin(progress * Math.PI) * 200;
+        // Gentle upward arc
+        const yDrift = -Math.sin(progress * Math.PI) * 120;
 
-            p.style.left = (currentLeft + vx) + 'px';
-            p.style.top = (currentTop + vy) + 'px';
+        // Scale breathes up then settles
+        const scale = 1 + Math.sin(progress * Math.PI * 0.8) * 0.6;
 
-            opacity -= 0.015;
-            p.style.opacity = opacity;
+        // Slight rotation wobble for organic feel
+        const rotateZ = Math.sin(progress * Math.PI * 1.5) * 8;
+        const rotateY = Math.sin(progress * Math.PI) * 12;
 
-            if (opacity > 0) {
-                requestAnimationFrame(animate);
-            } else {
-                p.remove();
+        // Smooth fade using separate easing
+        const opacity = easeFadeOut(progress);
+
+        // Neon glow fades with the number
+        const neonColor = el.dataset.neon || '#0ff';
+        const glowStrength = opacity;
+        el.style.textShadow = `
+            0 0 ${10 * glowStrength}px #fff,
+            0 0 ${20 * glowStrength}px #fff,
+            0 0 ${40 * glowStrength}px ${neonColor},
+            0 0 ${80 * glowStrength}px ${neonColor},
+            0 0 ${120 * glowStrength}px ${neonColor},
+            0 0 ${200 * glowStrength}px ${neonColor}
+        `;
+
+        el.style.transform = `${currentTransform} translate3d(${xDrift}px, ${yDrift}px, ${zForward}px) scale(${scale}) rotateZ(${rotateZ}deg) rotateY(${rotateY}deg)`;
+        el.style.opacity = opacity;
+
+        if (progress < 1) {
+            requestAnimationFrame(animate);
+        } else {
+            if (el.parentNode) {
+                el.remove();
             }
-        };
-        requestAnimationFrame(animate);
+        }
     }
 
-    // Fade out the original element
-    el.style.opacity = '0';
-    el.style.transform += ' scale(2) translateZ(500px)';
-
-    setTimeout(() => {
-        if (el.parentNode) {
-            el.remove();
-        }
-    }, 1000);
+    requestAnimationFrame(animate);
 }
 
 document.addEventListener('DOMContentLoaded', () => {

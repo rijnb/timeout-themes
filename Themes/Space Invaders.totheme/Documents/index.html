@@ -10,16 +10,17 @@
       overflow: hidden;
       display: flex;
       justify-content: center;
-      align-items: center;
+      align-items: flex-start;
       width: 100vw;
       height: 100vh;
     }
     #game-container {
       width: 60vw;
       height: 60vh;
+      margin-top: 50px;
       display: flex;
       justify-content: center;
-      align-items: center;
+      align-items: flex-start;
     }
     canvas {
       display: block;
@@ -176,8 +177,10 @@
 
     let gridDir = 1;
     let gridX = 0, gridY = 0;
+    let gridTargetY = 0;          // smooth Y drop target
     let gridSpeed = 38; // px/s
     let gridVelocity = 0; // px/s, updated each frame (positive = right)
+    let gridTargetVelocity = 0;   // desired velocity — gridVelocity lerps toward this
     let bounceCount = 0;   // total wall bounces so far
     const DROP_EVERY = 3;  // drop only every Nth bounce
     let spriteFrameTimer = 0;
@@ -201,9 +204,9 @@
         bounceCount++;
         if (bounceCount % DROP_EVERY === 0) {
           const barrierTop = barriers.length > 0 ? barriers[0].y : H - 120;
-          const bottomEnemyY = Math.max(...alive.map(e => e.y + gridY + ENEMY_H));
+          const bottomEnemyY = Math.max(...alive.map(e => e.y + gridTargetY + ENEMY_H));
           if (bottomEnemyY + 18 < barrierTop) {
-            gridY += 18;
+            gridTargetY += 18;
           }
         }
       } else if (gridDir === -1 && minX <= 18) {
@@ -211,9 +214,9 @@
         bounceCount++;
         if (bounceCount % DROP_EVERY === 0) {
           const barrierTop = barriers.length > 0 ? barriers[0].y : H - 120;
-          const bottomEnemyY = Math.max(...alive.map(e => e.y + gridY + ENEMY_H));
+          const bottomEnemyY = Math.max(...alive.map(e => e.y + gridTargetY + ENEMY_H));
           if (bottomEnemyY + 18 < barrierTop) {
-            gridY += 18;
+            gridTargetY += 18;
           }
         }
       }
@@ -221,8 +224,20 @@
       // Speed up slightly as enemies are destroyed
       const ratio = alive.length / TOTAL_ENEMIES;
       const speed = gridSpeed * (1 + (1 - ratio) * 0.8);
-      gridVelocity = gridDir * speed;
+      gridTargetVelocity = gridDir * speed;
+
+      // Ease-in-out: smoothly lerp velocity toward target (soft direction changes)
+      const lerpFactor = Math.min(1, delta / 300);
+      gridVelocity += (gridTargetVelocity - gridVelocity) * lerpFactor;
       gridX += gridVelocity * (delta / 1000);
+
+      // Smooth Y drops (ease toward target Y)
+      const dy = gridTargetY - gridY;
+      if (Math.abs(dy) > 0.5) {
+        gridY += dy * Math.min(1, delta / 250);
+      } else {
+        gridY = gridTargetY;
+      }
     }
 
     function drawSprite(x, y, type, frame, color) {
@@ -265,12 +280,19 @@
     };
 
     let driftTimer = 0;
+    let moveCommitTimer = 0;       // cooldown before accepting a new target
+    const MOVE_COMMIT_TIME = 800;  // ms — commit to current direction before changing
+    const MOVE_DEAD_ZONE = 60;     // px — ignore target changes smaller than this
+    let playerVelocity = 0;        // current smoothed velocity
 
     function evadeToSafeX(threatX) {
+      // Threats always override the commit timer and smoothing
+      moveCommitTimer = 0;
+      const clearance = 120; // move well clear of the threat
       if (threatX < W / 2) {
-        player.targetX = Math.min(W - PLAYER_W - 30, threatX + 70);
+        player.targetX = Math.min(W - PLAYER_W - 30, threatX + clearance);
       } else {
-        player.targetX = Math.max(30, threatX - 70);
+        player.targetX = Math.max(30, threatX - clearance);
       }
     }
 
@@ -286,12 +308,14 @@
     function updatePlayer(delta, elapsed) {
       const playerCX = player.x + PLAYER_W / 2;
       let threatened = false;
+      const EVASION_ZONE = ENEMY_W * 2 + PLAYER_W; // wide detection zone for divers
 
-      // --- Threat 1: diving enemies ---
+      // --- Threat 1 (HIGHEST PRIORITY): diving enemies ---
+      // Check ALL diving enemies, even far away, and evade the closest one
+      let closestDiverDist = Infinity;
+      let closestDiverImpactX = null;
       enemies.forEach(e => {
         if (!e.alive || !e.diving) return;
-        // Estimate diver velocity from its current motion direction
-        // Use a simple approximation: diver moves toward diveTargetX/Y
         const diverCX = e.x + ENEMY_W / 2;
         const dx = e.diveTargetX - e.x;
         const dy = e.diveTargetY - e.y;
@@ -299,31 +323,49 @@
         const vx = (dx / dist) * DIVE_SPEED;
         const vy = (dy / dist) * DIVE_SPEED;
         const impactX = predictedImpactX(diverCX, e.y, vx, vy);
-        if (impactX !== null && Math.abs(impactX - playerCX) < ENEMY_W + PLAYER_W) {
-          evadeToSafeX(impactX);
+        if (impactX !== null && Math.abs(impactX - playerCX) < EVASION_ZONE) {
+          const diverDist = Math.abs(e.y - player.y);
+          if (diverDist < closestDiverDist) {
+            closestDiverDist = diverDist;
+            closestDiverImpactX = impactX;
+          }
           threatened = true;
         }
       });
+      if (closestDiverImpactX !== null) {
+        evadeToSafeX(closestDiverImpactX);
+        // Override speed — move fast when evading divers
+        player.speed = 300;
+        // Force immediate velocity toward evasion target
+        const evadeDx = player.targetX - player.x;
+        playerVelocity = Math.sign(evadeDx) * player.speed;
+      }
 
       // --- Threat 2: falling bombs ---
-      bombs.forEach(b => {
-        const impactX = predictedImpactX(b.x, b.y, 0, BOMB_SPEED);
-        if (impactX !== null && Math.abs(impactX - playerCX) < PLAYER_W / 2 + 12) {
-          evadeToSafeX(impactX);
-          threatened = true;
-        }
-      });
+      if (!threatened) {
+        bombs.forEach(b => {
+          const impactX = predictedImpactX(b.x, b.y, 0, BOMB_SPEED);
+          if (impactX !== null && Math.abs(impactX - playerCX) < PLAYER_W + 20) {
+            evadeToSafeX(impactX);
+            threatened = true;
+          }
+        });
+      }
 
       // --- Threat 3: UFO bombs ---
-      ufoBombs.forEach(b => {
-        const impactX = predictedImpactX(b.x, b.y, 0, UFO_BOMB_SPEED);
-        if (impactX !== null && Math.abs(impactX - playerCX) < PLAYER_W / 2 + 12) {
-          evadeToSafeX(impactX);
-          threatened = true;
-        }
-      });
+      if (!threatened) {
+        ufoBombs.forEach(b => {
+          const impactX = predictedImpactX(b.x, b.y, 0, UFO_BOMB_SPEED);
+          if (impactX !== null && Math.abs(impactX - playerCX) < PLAYER_W + 20) {
+            evadeToSafeX(impactX);
+            threatened = true;
+          }
+        });
+      }
 
       if (!threatened) {
+        moveCommitTimer = Math.max(0, moveCommitTimer - delta);
+
         const target = getNextTarget();
         const aliveEnemies = enemies.filter(e => e.alive);
         const milestoneIdx = TOTAL_ENEMIES - aliveEnemies.length;
@@ -336,7 +378,14 @@
           const travelTime = (player.y - ey) / BULLET_SPEED;
           const futureX = ex + (target.diving ? 0 : gridVelocity * travelTime) + ENEMY_W / 2;
 
-          player.targetX = futureX - PLAYER_W / 2;
+          const candidateX = futureX - PLAYER_W / 2;
+          const shift = Math.abs(candidateX - player.targetX);
+
+          // Only change target if commit timer expired AND the change is significant
+          if (moveCommitTimer <= 0 && shift > MOVE_DEAD_ZONE) {
+            player.targetX = candidateX;
+            moveCommitTimer = MOVE_COMMIT_TIME;
+          }
 
           // If we are getting close to fireTime, move faster!
           const fireTime = targetMilestone - travelTime;
@@ -350,15 +399,29 @@
           if (driftTimer > 2200) {
             driftTimer = 0;
             player.targetX = 70 + Math.random() * (W - PLAYER_W - 140);
+            moveCommitTimer = MOVE_COMMIT_TIME;
           }
         }
       }
 
       const dx = player.targetX - player.x;
-      if (Math.abs(dx) > 2) {
-        player.x += Math.sign(dx) * player.speed * (delta / 1000);
+      if (Math.abs(dx) > MOVE_DEAD_ZONE) {
+        // Ease-in: gently accelerate toward desired direction
+        // Scale speed down when close to target for ease-out approach
+        const distRatio = Math.min(Math.abs(dx) / 150, 1); // 0..1
+        const easedSpeed = player.speed * (0.3 + 0.7 * distRatio); // slow near target
+        const desiredV = Math.sign(dx) * easedSpeed;
+        playerVelocity += (desiredV - playerVelocity) * Math.min(1, delta / 350);
+        player.x += playerVelocity * (delta / 1000);
       } else {
-        player.x = player.targetX;
+        // Ease-out: smoothly decelerate to stop
+        playerVelocity *= Math.max(0, 1 - delta / 250);
+        if (Math.abs(playerVelocity) < 3) {
+          playerVelocity = 0;
+          player.x = player.targetX;
+        } else {
+          player.x += playerVelocity * (delta / 1000);
+        }
       }
       player.x = Math.max(10, Math.min(W - PLAYER_W - 10, player.x));
     }
@@ -429,7 +492,7 @@
     let rechargeTimer = 0;
     let currentShotIsBurst = false;
     const BURST_SHOT_DELAY  = 200;  // ms between shots in a burst
-    const RECHARGE_DELAY    = 6800; // ms recharge after a burst
+    const RECHARGE_DELAY    = 3000; // ms recharge after a burst
     const NORMAL_SHOT_DELAY = 800;  // ms recharge after a normal single shot
 
     function getNextTarget() {
@@ -498,9 +561,15 @@
           const overdue = elapsed > fireTime + 300; // if more than 300ms overdue, just fire
 
           if (aligned || overdue) {
+            // Compute horizontal velocity so the bullet angles toward the target
+            const dx = futureX - px;
+            const dy = player.y - ey; // vertical distance to target
+            const vx = dy > 0 ? (dx / dy) * BULLET_SPEED : 0;
+
             bullets.push({
               x: px,
               y: player.y,
+              vx: vx,
               targetEnemy: target,
               predictedX: futureX
             });
@@ -517,28 +586,43 @@
 
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
-        const te = b.targetEnemy;
-        if (!te.alive) {
+
+        b.y -= BULLET_SPEED * (delta / 1000);
+        b.x += (b.vx || 0) * (delta / 1000);
+
+        // Remove bullets that leave the screen
+        if (b.y < -20) {
           bullets.splice(i, 1);
           continue;
         }
-        const tx = (te.diving ? te.x : te.x + gridX) + ENEMY_W / 2;
-        const ty = (te.diving ? te.y : te.y + gridY) + ENEMY_H / 2;
 
-        b.y -= BULLET_SPEED * (delta / 1000);
-
-        // Collision detection: use actual current enemy position
-        if (b.y <= ty + ENEMY_H / 2 && Math.abs(b.x - tx) < ENEMY_W / 2 + 4) {
-          te.alive = false;
-          te.diving = false;
-          spawnExplosion(tx, ty, spriteColor(te.type, te.row));
+        // Remove bullets whose assigned target was already killed by another bullet
+        if (!b.targetEnemy.alive) {
           bullets.splice(i, 1);
+          continue;
+        }
 
-          if (enemies.filter(e => e.alive).length === 0) {
-            console.log("FINAL ENEMY DESTROYED AT: " + elapsed + "ms");
+        // Check collision against ALL alive enemies, not just the assigned target
+        let hit = false;
+        for (let j = 0; j < enemies.length; j++) {
+          const e = enemies[j];
+          if (!e.alive) continue;
+          const ex = (e.diving ? e.x : e.x + gridX) + ENEMY_W / 2;
+          const ey = (e.diving ? e.y : e.y + gridY) + ENEMY_H / 2;
+
+          if (b.y <= ey + ENEMY_H / 2 && b.y >= ey - ENEMY_H / 2 &&
+              Math.abs(b.x - ex) < ENEMY_W / 2 + 4) {
+            e.alive = false;
+            e.diving = false;
+            spawnExplosion(ex, ey, spriteColor(e.type, e.row));
+            bullets.splice(i, 1);
+            hit = true;
+
+            if (enemies.filter(e => e.alive).length === 0) {
+              console.log("FINAL ENEMY DESTROYED AT: " + elapsed + "ms");
+            }
+            break;
           }
-        } else if (b.y < -20) {
-          bullets.splice(i, 1);
         }
       }
     }
