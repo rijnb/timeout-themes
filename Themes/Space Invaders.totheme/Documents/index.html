@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Space Invaders</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <script>
+    // ─── Canvas & Constants ───────────────────────────────────────────────────
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const W = 800, H = 600;
+    canvas.width = W;
+    canvas.height = H;
+
+    const TOTAL_DURATION    = 180000; // 3 minutes in ms
+    const GAME_OVER_DURATION = 10000; // 10 seconds
+    const SHOOT_INTERVAL    =   3000; // 1 enemy every 3s
+    const ENEMY_COLS = 8, ENEMY_ROWS = 7;
+    const TOTAL_ENEMIES = ENEMY_COLS * ENEMY_ROWS; // 56
+
+    const COLOR_BG        = '#000000';
+    const COLOR_ENEMY_A   = '#00ff00';
+    const COLOR_ENEMY_B   = '#00dd00';
+    const COLOR_ENEMY_C   = '#00bb00';
+    const COLOR_PLAYER    = '#ffffff';
+    const COLOR_BULLET    = '#ffffff';
+    const COLOR_BOMB      = '#ff4444';
+    const COLOR_EXPLOSION = '#ffff00';
+    const COLOR_GAMEOVER  = '#00ff00';
+    const COLOR_UFO       = '#ff2222';
+    const COLOR_BARRIER   = '#00aa00';
+
+    // ─── Sprite Data ─────────────────────────────────────────────────────────
+    // Each sprite: array of 8 rows, each row is an 11-char binary string
+    const SPRITES = {
+      A: [ // crab — top row
+        ['00100000100','00010001000','00111111100','01101110110',
+         '11111111111','10111111101','10100000101','01011011010'],
+        ['00100000100','10010001001','10111111101','11101110111',
+         '11111111111','01111111110','00100000100','01000000010']
+      ],
+      B: [ // squid — middle rows
+        ['00010000100','00001001000','00011111100','01110110111',
+         '11111111111','10111111101','10000000001','01100110011'],
+        ['00010000100','10001001001','10011111101','01110110111',
+         '11111111111','01111111110','01000000010','10100110101']
+      ],
+      C: [ // octopus — bottom rows
+        ['00111111100','11111111111','11101010111','11111111111',
+         '00101010100','01000000010','10100000101','01000000010'],
+        ['00111111100','11111111111','11101010111','11111111111',
+         '00101010100','01011011010','10100000101','00011011000']
+      ]
+    };
+
+    const PLAYER_SPRITE = [
+      '00000100000',
+      '00001110000',
+      '00001110000',
+      '11111111111',
+      '11111111111',
+      '11111111111'
+    ];
+
+    function spriteType(row) {
+      if (row === 0) return 'A';
+      if (row <= 2)  return 'B';
+      return 'C';
+    }
+
+    function spriteColor(type) {
+      if (type === 'A') return COLOR_ENEMY_A;
+      if (type === 'B') return COLOR_ENEMY_B;
+      return COLOR_ENEMY_C;
+    }
+
+    // ─── Enemy Grid ───────────────────────────────────────────────────────────
+    const ENEMY_W = 36, ENEMY_H = 28, ENEMY_PAD_X = 14, ENEMY_PAD_Y = 10;
+    const GRID_OFFSET_X = 52, GRID_OFFSET_Y = 55;
+
+    let enemies = [];
+    for (let r = 0; r < ENEMY_ROWS; r++) {
+      for (let c = 0; c < ENEMY_COLS; c++) {
+        enemies.push({
+          row: r, col: c,
+          x: GRID_OFFSET_X + c * (ENEMY_W + ENEMY_PAD_X),
+          y: GRID_OFFSET_Y + r * (ENEMY_H + ENEMY_PAD_Y),
+          alive: true,
+          type: spriteType(r),
+          diving: false,
+          diveProgress: 0,
+          diveStartX: 0, diveStartY: 0,
+          diveTargetX: 0, diveTargetY: 0,
+          diveReturnX: 0, diveReturnY: 0
+        });
+      }
+    }
+
+    let gridDir = 1;
+    let gridX = 0, gridY = 0;
+    let gridSpeed = 38; // px/s
+    let spriteFrameTimer = 0;
+    let spriteFrame = 0;
+
+    function updateEnemies(delta) {
+      spriteFrameTimer += delta;
+      if (spriteFrameTimer > 500) {
+        spriteFrame = 1 - spriteFrame;
+        spriteFrameTimer = 0;
+      }
+
+      const alive = enemies.filter(e => e.alive && !e.diving);
+      if (alive.length === 0) return;
+
+      const minX = Math.min(...alive.map(e => e.x + gridX));
+      const maxX = Math.max(...alive.map(e => e.x + gridX + ENEMY_W));
+
+      if (gridDir === 1 && maxX >= W - 18) {
+        gridDir = -1;
+        gridY += 18;
+      } else if (gridDir === -1 && minX <= 18) {
+        gridDir = 1;
+        gridY += 18;
+      }
+
+      // Speed up slightly as enemies are destroyed
+      const ratio = alive.length / TOTAL_ENEMIES;
+      const speed = gridSpeed * (1 + (1 - ratio) * 0.8);
+      gridX += gridDir * speed * (delta / 1000);
+    }
+
+    function drawSprite(x, y, type, frame, color) {
+      const rows = SPRITES[type][frame];
+      const pw = ENEMY_W / 11;
+      const ph = ENEMY_H / 8;
+      ctx.fillStyle = color;
+      rows.forEach((row, ry) => {
+        for (let cx = 0; cx < row.length; cx++) {
+          if (row[cx] === '1') {
+            ctx.fillRect(
+              Math.round(x + cx * pw),
+              Math.round(y + ry * ph),
+              Math.ceil(pw), Math.ceil(ph)
+            );
+          }
+        }
+      });
+    }
+
+    function renderEnemies() {
+      enemies.forEach(e => {
+        if (!e.alive) return;
+        const ex = e.diving ? e.x : e.x + gridX;
+        const ey = e.diving ? e.y : e.y + gridY;
+        drawSprite(ex, ey, e.type, spriteFrame, spriteColor(e.type));
+      });
+    }
+
+    // ─── Player ───────────────────────────────────────────────────────────────
+    const PLAYER_W = 44, PLAYER_H = 24;
+    let player = {
+      x: W / 2 - PLAYER_W / 2,
+      y: H - 58,
+      speed: 130,
+      targetX: W / 2 - PLAYER_W / 2
+    };
+
+    let driftTimer = 0;
+
+    function evadeToSafeX(threatX) {
+      if (threatX < W / 2) {
+        player.targetX = Math.min(W - PLAYER_W - 30, player.targetX + 130);
+      } else {
+        player.targetX = Math.max(30, player.targetX - 130);
+      }
+    }
+
+    function updatePlayer(delta) {
+      driftTimer += delta;
+      if (driftTimer > 2200) {
+        driftTimer = 0;
+        player.targetX = 70 + Math.random() * (W - PLAYER_W - 140);
+      }
+
+      const dx = player.targetX - player.x;
+      if (Math.abs(dx) > 2) {
+        player.x += Math.sign(dx) * player.speed * (delta / 1000);
+      } else {
+        player.x = player.targetX;
+      }
+      player.x = Math.max(10, Math.min(W - PLAYER_W - 10, player.x));
+    }
+
+    function renderPlayer() {
+      if (gamePhase === 'gameover') return;
+      const pw = PLAYER_W / 11;
+      const ph = PLAYER_H / 6;
+      ctx.fillStyle = COLOR_PLAYER;
+      PLAYER_SPRITE.forEach((row, ry) => {
+        for (let cx = 0; cx < row.length; cx++) {
+          if (row[cx] === '1') {
+            ctx.fillRect(
+              Math.round(player.x + cx * pw),
+              Math.round(player.y + ry * ph),
+              Math.ceil(pw), Math.ceil(ph)
+            );
+          }
+        }
+      });
+    }
+
+    // ─── Barriers ─────────────────────────────────────────────────────────────
+    // 4 classic bunkers
+    const BARRIER_COLS = 4;
+    const barriers = [];
+    for (let i = 0; i < BARRIER_COLS; i++) {
+      const bx = 80 + i * ((W - 160) / (BARRIER_COLS - 1)) - 20;
+      const by = H - 120;
+      // Each barrier is a 4x3 block grid (each block 10x8)
+      const blocks = [];
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 4; c++) {
+          // Classic arch shape: skip bottom-left and bottom-right corners
+          if (r === 2 && (c === 1 || c === 2)) continue;
+          blocks.push({ r, c, hp: 3 });
+        }
+      }
+      barriers.push({ x: bx, y: by, blocks });
+    }
+
+    function renderBarriers() {
+      barriers.forEach(bar => {
+        bar.blocks.forEach(bl => {
+          const alpha = bl.hp / 3;
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = COLOR_BARRIER;
+          ctx.fillRect(bar.x + bl.c * 10, bar.y + bl.r * 8, 9, 7);
+        });
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    // ─── Player Bullet ────────────────────────────────────────────────────────
+    let bullet = null;
+    let shootTimer = 0;
+    let nextEnemyIndex = 0;
+
+    function getNextTarget() {
+      const alive = enemies.filter(e => e.alive && !e.diving);
+      if (alive.length === 0) return null;
+      // Bottom-to-top, left-to-right (classic targeting)
+      alive.sort((a, b) => (b.row - a.row) || (a.col - b.col));
+      return alive[nextEnemyIndex % alive.length];
+    }
+
+    const BULLET_SPEED = 420;
+
+    function updateBullet(delta, elapsed) {
+      if (gamePhase !== 'playing') return;
+
+      shootTimer += delta;
+      if (!bullet && shootTimer >= SHOOT_INTERVAL) {
+        shootTimer = 0;
+        const target = getNextTarget();
+        if (target) {
+          bullet = {
+            x: player.x + PLAYER_W / 2,
+            y: player.y,
+            targetEnemy: target
+          };
+        }
+      }
+
+      if (bullet) {
+        const te = bullet.targetEnemy;
+        if (!te.alive) {
+          // Target was killed by a diver exit — retarget
+          bullet = null;
+          return;
+        }
+        const tx = (te.diving ? te.x : te.x + gridX) + ENEMY_W / 2;
+        const ty = (te.diving ? te.y : te.y + gridY) + ENEMY_H / 2;
+        const dx = tx - bullet.x;
+        const dy = ty - bullet.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < 12) {
+          te.alive = false;
+          te.diving = false;
+          spawnExplosion(tx, ty);
+          bullet = null;
+          nextEnemyIndex++;
+        } else {
+          const spd = BULLET_SPEED * (delta / 1000);
+          bullet.x += (dx / dist) * spd;
+          bullet.y += (dy / dist) * spd;
+        }
+      }
+    }
+
+    function renderBullet() {
+      if (!bullet) return;
+      ctx.fillStyle = COLOR_BULLET;
+      ctx.fillRect(Math.round(bullet.x - 2), Math.round(bullet.y - 10), 4, 18);
+    }
+
+    // ─── Explosions ───────────────────────────────────────────────────────────
+    let explosions = [];
+
+    function spawnExplosion(x, y) {
+      explosions.push({ x, y, timer: 0, duration: 450 });
+    }
+
+    function updateExplosions(delta) {
+      explosions = explosions.filter(e => {
+        e.timer += delta;
+        return e.timer < e.duration;
+      });
+    }
+
+    function renderExplosions() {
+      explosions.forEach(e => {
+        const t = e.timer / e.duration;
+        ctx.globalAlpha = 1 - t;
+        ctx.fillStyle = COLOR_EXPLOSION;
+        const size = 28 * t;
+        for (let i = 0; i < 8; i++) {
+          const angle = (i / 8) * Math.PI * 2;
+          ctx.fillRect(
+            Math.round(e.x + Math.cos(angle) * size - 2),
+            Math.round(e.y + Math.sin(angle) * size - 2),
+            4, 4
+          );
+        }
+        // Center flash
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(Math.round(e.x - 4 * (1 - t)), Math.round(e.y - 4 * (1 - t)),
+                     Math.round(8 * (1 - t)), Math.round(8 * (1 - t)));
+        ctx.globalAlpha = 1;
+      });
+    }
+
+    // ─── Enemy Bombs ──────────────────────────────────────────────────────────
+    let bombs = [];
+    let bombTimer = 0;
+    const BOMB_INTERVAL = 1600;
+    const BOMB_SPEED    = 175;
+
+    function spawnBomb() {
+      const alive = enemies.filter(e => e.alive && !e.diving);
+      if (alive.length === 0) return;
+      const shooter = alive[Math.floor(Math.random() * alive.length)];
+      const bx = (shooter.diving ? shooter.x : shooter.x + gridX) + ENEMY_W / 2;
+      const by = (shooter.diving ? shooter.y : shooter.y + gridY) + ENEMY_H;
+      bombs.push({ x: bx, y: by, frame: 0, frameTimer: 0 });
+    }
+
+    function updateBombs(delta) {
+      if (gamePhase !== 'playing') return;
+
+      bombTimer += delta;
+      if (bombTimer >= BOMB_INTERVAL) {
+        bombTimer = 0;
+        spawnBomb();
+      }
+
+      bombs = bombs.filter(b => {
+        b.y += BOMB_SPEED * (delta / 1000);
+        b.frameTimer += delta;
+        if (b.frameTimer > 140) { b.frame = 1 - b.frame; b.frameTimer = 0; }
+
+        // Scripted miss: nudge bomb away from player when close
+        if (b.y > player.y - 70 && b.y < player.y + PLAYER_H + 10) {
+          const pcx = player.x + PLAYER_W / 2;
+          if (Math.abs(b.x - pcx) < 44) {
+            const nudge = (b.x < pcx ? -1 : 1) * 55 * (delta / 1000) * 9;
+            b.x += nudge;
+            evadeToSafeX(b.x);
+          }
+        }
+
+        // Damage barriers
+        barriers.forEach(bar => {
+          bar.blocks.forEach(bl => {
+            if (bl.hp <= 0) return;
+            const bkx = bar.x + bl.c * 10;
+            const bky = bar.y + bl.r * 8;
+            if (b.x >= bkx && b.x <= bkx + 9 && b.y >= bky && b.y <= bky + 7) {
+              bl.hp--;
+            }
+          });
+        });
+
+        return b.y < H + 20;
+      });
+    }
+
+    function renderBombs() {
+      ctx.fillStyle = COLOR_BOMB;
+      bombs.forEach(b => {
+        for (let i = 0; i < 4; i++) {
+          const offset = (i % 2 === b.frame) ? -3 : 3;
+          ctx.fillRect(Math.round(b.x + offset - 2), Math.round(b.y + i * 5 - 10), 4, 5);
+        }
+      });
+    }
+
+    // ─── Diving Enemies ───────────────────────────────────────────────────────
+    let diveTimer = 0;
+    const DIVE_INTERVAL = 4800;
+    const DIVE_SPEED    = 210;
+
+    function spawnDiver() {
+      const alive = enemies.filter(e => e.alive && !e.diving);
+      if (alive.length < 4) return;
+      const diver = alive[Math.floor(Math.random() * alive.length)];
+      diver.diving = true;
+      diver.diveProgress = 0;
+      diver.diveStartX = diver.x + gridX;
+      diver.diveStartY = diver.y + gridY;
+      const missOffset = (Math.random() > 0.5 ? 1 : -1) * (62 + Math.random() * 38);
+      diver.diveTargetX = player.x + PLAYER_W / 2 + missOffset;
+      diver.diveTargetY = player.y + 8;
+      diver.diveReturnX = diver.diveTargetX + missOffset * 0.8;
+      diver.diveReturnY = H + 70;
+      evadeToSafeX(player.x + PLAYER_W / 2 - missOffset);
+    }
+
+    function updateDivers(delta) {
+      if (gamePhase !== 'playing') return;
+
+      diveTimer += delta;
+      if (diveTimer >= DIVE_INTERVAL) {
+        diveTimer = 0;
+        spawnDiver();
+      }
+
+      enemies.forEach(e => {
+        if (!e.alive || !e.diving) return;
+        e.diveProgress += DIVE_SPEED * (delta / 1000);
+
+        const phase1Dist = Math.sqrt(
+          Math.pow(e.diveTargetX - e.diveStartX, 2) +
+          Math.pow(e.diveTargetY - e.diveStartY, 2)
+        );
+
+        if (e.diveProgress < phase1Dist) {
+          const t = e.diveProgress / phase1Dist;
+          // Slight curve via quadratic bezier feel (ease-in)
+          const ease = t * t;
+          e.x = e.diveStartX + (e.diveTargetX - e.diveStartX) * ease;
+          e.y = e.diveStartY + (e.diveTargetY - e.diveStartY) * ease;
+        } else {
+          const p2 = e.diveProgress - phase1Dist;
+          const phase2Dist = Math.sqrt(
+            Math.pow(e.diveReturnX - e.diveTargetX, 2) +
+            Math.pow(e.diveReturnY - e.diveTargetY, 2)
+          );
+          const t2 = Math.min(1, p2 / Math.max(1, phase2Dist));
+          e.x = e.diveTargetX + (e.diveReturnX - e.diveTargetX) * t2;
+          e.y = e.diveTargetY + (e.diveReturnY - e.diveTargetY) * t2;
+          if (t2 >= 1) {
+            e.alive = false;
+            e.diving = false;
+          }
+        }
+      });
+    }
+
+    // ─── UFO Mystery Ship ─────────────────────────────────────────────────────
+    let ufo = null;
+    let ufoTimer = 0;
+    const UFO_INTERVAL = 14000;
+
+    function updateUFO(delta) {
+      if (gamePhase !== 'playing') return;
+      ufoTimer += delta;
+      if (!ufo && ufoTimer > UFO_INTERVAL) {
+        ufoTimer = 0;
+        ufo = { x: -60, y: 28, speed: 145 };
+      }
+      if (ufo) {
+        ufo.x += ufo.speed * (delta / 1000);
+        if (ufo.x > W + 70) ufo = null;
+      }
+    }
+
+    function renderUFO() {
+      if (!ufo) return;
+      ctx.fillStyle = COLOR_UFO;
+      // Saucer body
+      ctx.beginPath();
+      ctx.ellipse(ufo.x + 22, ufo.y + 10, 22, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Dome
+      ctx.beginPath();
+      ctx.ellipse(ufo.x + 22, ufo.y + 5, 11, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Windows
+      ctx.fillStyle = '#ffaaaa';
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.arc(ufo.x + 12 + i * 10, ufo.y + 10, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // ─── Game Phase & GAME OVER ───────────────────────────────────────────────
+    let gamePhase = 'playing';
+    let gameOverTimer = 0;
+
+    function checkPhase(delta) {
+      const aliveCount = enemies.filter(e => e.alive).length;
+      if (gamePhase === 'playing' && aliveCount === 0) {
+        gamePhase = 'gameover';
+        gameOverTimer = 0;
+        bullet = null;
+        bombs = [];
+      }
+      if (gamePhase === 'gameover') {
+        gameOverTimer += delta;
+      }
+    }
+
+    function renderGameOver() {
+      if (gamePhase !== 'gameover') return;
+
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      ctx.fillRect(0, 0, W, H);
+
+      // Blink: visible 650ms, hidden 150ms out of 800ms cycle
+      const t = gameOverTimer % 800;
+      if (t > 150) {
+        // Shadow
+        ctx.font = 'bold 80px "Courier New", Courier, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#003300';
+        ctx.fillText('GAME OVER', W / 2 + 5, H / 2 + 5);
+        // Main text
+        ctx.fillStyle = COLOR_GAMEOVER;
+        ctx.fillText('GAME OVER', W / 2, H / 2);
+
+        // Subtitle
+        ctx.font = '22px "Courier New", Courier, monospace';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('ALL INVADERS DESTROYED', W / 2, H / 2 + 72);
+
+        // Score
+        const score = TOTAL_ENEMIES * 10;
+        ctx.font = '18px "Courier New", Courier, monospace';
+        ctx.fillStyle = COLOR_GAMEOVER;
+        ctx.fillText(`SCORE: ${score}`, W / 2, H / 2 + 108);
+      }
+    }
+
+    // ─── HUD ──────────────────────────────────────────────────────────────────
+    function renderHUD() {
+      if (gamePhase === 'gameover') return;
+      const destroyed = TOTAL_ENEMIES - enemies.filter(e => e.alive).length;
+      ctx.fillStyle = COLOR_ENEMY_A;
+      ctx.font = '15px "Courier New", Courier, monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText('SCORE: ' + (destroyed * 10), 18, 8);
+      ctx.textAlign = 'right';
+      ctx.fillText('INVADERS: ' + enemies.filter(e => e.alive).length, W - 18, 8);
+      // Lives indicator (always 3 — player never dies)
+      ctx.textAlign = 'left';
+      ctx.fillText('LIVES: 3', 18, H - 22);
+    }
+
+    // ─── Scanlines ────────────────────────────────────────────────────────────
+    function renderScanlines() {
+      ctx.fillStyle = 'rgba(0,0,0,0.07)';
+      for (let y = 0; y < H; y += 4) {
+        ctx.fillRect(0, y, W, 2);
+      }
+    }
+
+    // ─── Ground Line ─────────────────────────────────────────────────────────
+    function renderGround() {
+      if (gamePhase === 'gameover') return;
+      ctx.fillStyle = '#00aa00';
+      ctx.fillRect(0, H - 36, W, 2);
+    }
+
+    // ─── Game Loop ────────────────────────────────────────────────────────────
+    let lastTime = 0;
+    let startTime = null;
+
+    function update(delta, elapsed) {
+      if (gamePhase === 'playing') {
+        updateEnemies(delta);
+        updatePlayer(delta);
+        updateBullet(delta, elapsed);
+        updateBombs(delta);
+        updateDivers(delta);
+        updateUFO(delta);
+        updateExplosions(delta);
+      } else {
+        updateExplosions(delta);
+      }
+      checkPhase(delta);
+    }
+
+    function render(elapsed) {
+      // Background
+      ctx.fillStyle = COLOR_BG;
+      ctx.fillRect(0, 0, W, H);
+
+      renderGround();
+      renderBarriers();
+      renderEnemies();
+      renderUFO();
+      renderBombs();
+      renderBullet();
+      renderExplosions();
+      renderPlayer();
+      renderHUD();
+      renderScanlines();
+      renderGameOver();
+    }
+
+    function gameLoop(timestamp) {
+      if (!startTime) startTime = timestamp;
+      const elapsed = timestamp - startTime;
+      const delta = Math.min(timestamp - lastTime, 50); // cap at 50ms to avoid spiral
+      lastTime = timestamp;
+
+      update(delta, elapsed);
+      render(elapsed);
+
+      if (elapsed < TOTAL_DURATION + GAME_OVER_DURATION) {
+        requestAnimationFrame(gameLoop);
+      }
+    }
+
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>

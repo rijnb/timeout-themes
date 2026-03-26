@@ -1,0 +1,14 @@
+{
+  "author": {
+    "name": "Junie",
+    "email": "junie@jetbrains.com",
+    "url": "https://github.com/JetBrains/junie"
+  },
+  "comments": "A Space Invaders arcade game animation lasting 3 minutes.",
+  "rootDocument": "index.html",
+  "created": "2026-03-26",
+  "identifier": "space-invaders",
+  "version": 1,
+  "modified": "2026-03-26",
+  "name": "Space Invaders"
+}
