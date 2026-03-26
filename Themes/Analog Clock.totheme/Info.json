@@ -1,0 +1,18 @@
+{
+  "author": {
+    "name" : "David Sinclair",
+    "email" : "support@dejal.com",
+    "url" : "https://dejal.com/"
+  },
+  "credits" : {
+    "name" : "HTML5 and CSS3 Tutorial",
+    "url" : "http://blogs.html5andcss3.org/html5-canvas-clock/"
+  },
+  "comments": "A fancy analog clock with moving hands.",
+  "rootDocument": "index.html",
+  "created": "2016-02-02",
+  "identifier": "Clock",
+  "version": 1,
+  "modified": "2016-02-02",
+  "name": "Clock"
+}

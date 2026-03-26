@@ -1,0 +1,18 @@
+{
+  "author": {
+    "name" : "David Sinclair",
+    "email" : "support@dejal.com",
+    "url" : "https://dejal.com/"
+  },
+  "credits" : {
+    "name" : "Tutorialzine",
+    "url" : "https://tutorialzine.com/2013/06/digital-clock"
+  },
+  "comments": "A nice old-school LCD-like digital clock.",
+  "rootDocument": "index.html",
+  "created": "2021-05-11",
+  "identifier": "DigitalClockLCD",
+  "version": 1,
+  "modified": "2021-05-11",
+  "name": "LCD Digital Clock"
+}
