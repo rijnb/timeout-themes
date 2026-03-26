@@ -1,7 +1,3 @@
-<!-- BEGIN:nextjs-agent-rules -->
-This is NOT the Next.js you know. This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
-
 You have Superpowers skills. Before you do anything else, make sure read how to use the Superpowers skills at "$HOME/.junie/skills/using-superpowers".
 
 Always use the Superpowers skills, except:

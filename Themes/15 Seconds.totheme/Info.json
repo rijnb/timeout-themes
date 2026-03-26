@@ -1,8 +1,8 @@
 {
   "author": {
-    "name" : "Junie",
-    "email" : "junie@jetbrains.com",
-    "url" : "https://github.com/JetBrains/junie"
+    "name" : "Rijn Buve",
+    "email" : "rijn@buve.nl",
+    "url" : "https://github.com/rijnb/timeout-themes"
   },
   "comments": "A 3D neon countdown from 15 with vaporizing numbers.",
   "rootDocument": "index.html",

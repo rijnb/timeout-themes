@@ -1,8 +1,8 @@
 const container = document.getElementById('countdown-container');
 const TOTAL_SECONDS = 15;
 const Z_SPACING = 3600; // 3x spacing for a massive corridor
-const X_SHIFT = 750; // 3x shifted to the side
-const Y_SHIFT = 300; // 3x vertical shift
+const X_SHIFT = -750; // 3x shifted to the side
+const Y_SHIFT = -300; // 3x vertical shift
 
 // 16 colors spanning the rainbow spectrum
 const rainbowColors = [
