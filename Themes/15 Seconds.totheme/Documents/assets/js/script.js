@@ -1,8 +1,8 @@
 const container = document.getElementById('countdown-container');
 const TOTAL_SECONDS = 15;
-const Z_SPACING = 200; // Smaller spacing to fit corridor view
-const X_SHIFT = 60; // Shift to the side
-const Y_SHIFT = 30; // Shift slightly down
+const Z_SPACING = 500; // Much deeper spacing for a long corridor
+const X_SHIFT = 120; // Increased shift for better visibility
+const Y_SHIFT = 60; // Increased vertical shift
 
 const neonColors = [
     '#00ffff', // cyan
