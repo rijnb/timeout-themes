@@ -4,20 +4,15 @@ const Z_SPACING = 3600; // 3x spacing for a massive corridor
 const X_SHIFT = 750; // 3x shifted to the side
 const Y_SHIFT = 300; // 3x vertical shift
 
-const neonColors = [
-    '#00ffff', // cyan
-    '#ff00ff', // magenta
-    '#00ff00', // lime
+const rainbowColors = [
+    '#ff0000', // red
+    '#ff7f00', // orange
     '#ffff00', // yellow
-    '#ff3300', // neon red
-    '#33ff00', // electric green
-    '#ff9900', // neon orange
-    '#cc00ff'  // neon purple
+    '#00ff00', // green
+    '#0000ff', // blue
+    '#4b0082', // indigo
+    '#8b00ff'  // violet
 ];
-
-function getRandomNeon() {
-    return neonColors[Math.floor(Math.random() * neonColors.length)];
-}
 
 function applyNeonStyle(div, color) {
     div.style.color = '#fff';
@@ -39,7 +34,9 @@ function createNumbers() {
         div.textContent = i;
         div.id = `num-${i}`;
 
-        applyNeonStyle(div, getRandomNeon());
+        // Rainbow color logic starting from Red at number 15
+        const colorIndex = (TOTAL_SECONDS - i) % rainbowColors.length;
+        applyNeonStyle(div, rainbowColors[colorIndex]);
 
         // Corridor positioning
         const offset = TOTAL_SECONDS - i;

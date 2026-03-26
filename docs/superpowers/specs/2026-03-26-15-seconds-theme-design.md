@@ -4,7 +4,7 @@
 A new theme called "15 Seconds" for the TimeOut-Themes repository. This theme shows a countdown from 15 to 0, using large 3D-stacked neon numbers that move toward the viewer.
 
 ## Visual Style: Retro Digital / Neon
-- **Color Palette:** High-contrast **random neon colors** (e.g., cyan, magenta, lime, yellow, neon orange) for each number.
+- **Color Palette:** High-contrast **rainbow color sequence**, starting with **Red** for the first number (15), followed by Orange, Yellow, Green, Blue, Indigo, and Violet.
 - **Typography:** Bold, modern sans-serif or monospaced font. **Numbers are very large (25rem+).**
 - **Neon Effect:** Multiple layers of CSS `text-shadow` to create a glowing intensity.
 - **3D Corridor:** A container with **perspective: 6000px** for massive depth. Numbers are stacked with extreme spacing (**Z-axis spacing: 3600px**). Each number is **extremely shifted** along the X and Y axes (X: 750px, Y: 300px), creating a massive, receding, and curved corridor effect that trails far into the infinite digital horizon.
