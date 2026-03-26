@@ -5,12 +5,35 @@
   <title>Space Invaders</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; overflow: hidden; }
-    canvas { display: block; width: 100vw; height: 100vh; }
+    body {
+      background: #000;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    #game-container {
+      width: 60vw;
+      height: 60vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    canvas {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
   </style>
 </head>
 <body>
-  <canvas id="game"></canvas>
+  <div id="game-container">
+    <canvas id="game"></canvas>
+  </div>
   <script>
     // ─── Canvas & Constants ───────────────────────────────────────────────────
     const canvas = document.getElementById('game');
@@ -177,17 +200,23 @@
 
     function evadeToSafeX(threatX) {
       if (threatX < W / 2) {
-        player.targetX = Math.min(W - PLAYER_W - 30, player.targetX + 130);
+        player.targetX = Math.min(W - PLAYER_W - 30, Math.max(player.targetX, threatX + 60));
       } else {
-        player.targetX = Math.max(30, player.targetX - 130);
+        player.targetX = Math.max(30, Math.min(player.targetX, threatX - 60));
       }
     }
 
     function updatePlayer(delta) {
-      driftTimer += delta;
-      if (driftTimer > 2200) {
-        driftTimer = 0;
-        player.targetX = 70 + Math.random() * (W - PLAYER_W - 140);
+      const target = getNextTarget();
+      if (target && !bullet) {
+        const tx = (target.diving ? target.x : target.x + gridX) + ENEMY_W / 2;
+        player.targetX = tx - PLAYER_W / 2;
+      } else {
+        driftTimer += delta;
+        if (driftTimer > 2200) {
+          driftTimer = 0;
+          player.targetX = 70 + Math.random() * (W - PLAYER_W - 140);
+        }
       }
 
       const dx = player.targetX - player.x;
@@ -268,14 +297,19 @@
 
       shootTimer += delta;
       if (!bullet && shootTimer >= SHOOT_INTERVAL) {
-        shootTimer = 0;
         const target = getNextTarget();
         if (target) {
-          bullet = {
-            x: player.x + PLAYER_W / 2,
-            y: player.y,
-            targetEnemy: target
-          };
+          const tx = (target.diving ? target.x : target.x + gridX) + ENEMY_W / 2;
+          const px = player.x + PLAYER_W / 2;
+          // Only shoot if aligned with target (within 5px)
+          if (Math.abs(tx - px) < 5) {
+            shootTimer = 0;
+            bullet = {
+              x: px,
+              y: player.y,
+              targetEnemy: target
+            };
+          }
         }
       }
 
@@ -288,20 +322,21 @@
         }
         const tx = (te.diving ? te.x : te.x + gridX) + ENEMY_W / 2;
         const ty = (te.diving ? te.y : te.y + gridY) + ENEMY_H / 2;
-        const dx = tx - bullet.x;
-        const dy = ty - bullet.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist < 12) {
+        // Move bullet straight up
+        bullet.y -= BULLET_SPEED * (delta / 1000);
+
+        // Collision detection (vertical overlap and horizontal proximity)
+        if (bullet.y <= ty + ENEMY_H / 2 && Math.abs(bullet.x - tx) < ENEMY_W / 2) {
           te.alive = false;
           te.diving = false;
           spawnExplosion(tx, ty);
           bullet = null;
           nextEnemyIndex++;
-        } else {
-          const spd = BULLET_SPEED * (delta / 1000);
-          bullet.x += (dx / dist) * spd;
-          bullet.y += (dy / dist) * spd;
+        }
+
+        if (bullet && bullet.y < -20) {
+          bullet = null;
         }
       }
     }
@@ -377,12 +412,10 @@
         b.frameTimer += delta;
         if (b.frameTimer > 140) { b.frame = 1 - b.frame; b.frameTimer = 0; }
 
-        // Scripted miss: nudge bomb away from player when close
-        if (b.y > player.y - 70 && b.y < player.y + PLAYER_H + 10) {
+        // Scripted miss: player evades bomb when close
+        if (b.y > player.y - 120 && b.y < player.y + PLAYER_H) {
           const pcx = player.x + PLAYER_W / 2;
-          if (Math.abs(b.x - pcx) < 44) {
-            const nudge = (b.x < pcx ? -1 : 1) * 55 * (delta / 1000) * 9;
-            b.x += nudge;
+          if (Math.abs(b.x - pcx) < 55) {
             evadeToSafeX(b.x);
           }
         }
