@@ -1,8 +1,8 @@
 const container = document.getElementById('countdown-container');
 const TOTAL_SECONDS = 15;
-const Z_SPACING = 1200; // Extreme spacing for a massive corridor
-const X_SHIFT = 250; // Much more shifted to the side
-const Y_SHIFT = 100; // Slightly more vertical shift
+const Z_SPACING = 3600; // 3x spacing for a massive corridor
+const X_SHIFT = 750; // 3x shifted to the side
+const Y_SHIFT = 300; // 3x vertical shift
 
 const neonColors = [
     '#00ffff', // cyan
