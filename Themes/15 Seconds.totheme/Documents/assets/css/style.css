@@ -6,7 +6,7 @@ body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 #scene {
-    perspective: 1500px; /* Increased for deeper corridor */
+    perspective: 2500px; /* Extreme depth for a massive corridor */
     width: 100vw;
     height: 100vh;
     display: flex;

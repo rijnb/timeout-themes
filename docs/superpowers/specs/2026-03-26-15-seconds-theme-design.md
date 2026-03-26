@@ -7,7 +7,7 @@ A new theme called "15 Seconds" for the TimeOut-Themes repository. This theme sh
 - **Color Palette:** High-contrast **random neon colors** (e.g., cyan, magenta, lime, yellow, neon orange) for each number.
 - **Typography:** Bold, modern sans-serif or monospaced font. **Numbers are very large (25rem+).**
 - **Neon Effect:** Multiple layers of CSS `text-shadow` to create a glowing intensity.
-- **3D Corridor:** A container with **perspective: 1500px** for extreme depth. Numbers are stacked with significant spacing (**Z-axis spacing: 400px+**). To ensure all numbers are visible, each is **progressively shifted** along the X and Y axes, creating a long, receding corridor effect.
+- **3D Corridor:** A container with **perspective: 2500px** for extreme depth. Numbers are stacked with massive spacing (**Z-axis spacing: 1200px+**). Each number is **heavily shifted** along the X and Y axes (X: 250px+, Y: 100px+), creating a long, receding, and curved corridor effect that trails into the far distance.
 
 ## Animation: Neon Vaporize
 - **Dissolve Effect:** When a number's time is up (after 1 second), it "vaporizes" into many small glowing "particles" that drift outward and fade.
