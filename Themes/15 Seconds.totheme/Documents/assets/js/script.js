@@ -4,14 +4,24 @@ const Z_SPACING = 3600; // 3x spacing for a massive corridor
 const X_SHIFT = 750; // 3x shifted to the side
 const Y_SHIFT = 300; // 3x vertical shift
 
+// 16 colors spanning the rainbow spectrum
 const rainbowColors = [
-    '#ff0000', // red
-    '#ff7f00', // orange
-    '#ffff00', // yellow
-    '#00ff00', // green
-    '#0000ff', // blue
-    '#4b0082', // indigo
-    '#8b00ff'  // violet
+    '#ff0000', // 15: Red
+    '#ff4400', // 14: Red-Orange
+    '#ff8800', // 13: Orange
+    '#ffbb00', // 12: Orange-Yellow
+    '#ffff00', // 11: Yellow
+    '#ccff00', // 10: Yellow-Green
+    '#88ff00', // 9: Lime
+    '#00ff00', // 8: Green
+    '#00ff88', // 7: Green-Cyan
+    '#00ffff', // 6: Cyan
+    '#0088ff', // 5: Blue
+    '#0000ff', // 4: Blue
+    '#4b0082', // 3: Indigo
+    '#6a00ff', // 2: Indigo-Violet
+    '#8b00ff', // 1: Violet
+    '#c000ff'  // 0: Deep Violet
 ];
 
 function applyNeonStyle(div, color) {
@@ -34,8 +44,9 @@ function createNumbers() {
         div.textContent = i;
         div.id = `num-${i}`;
 
-        // Rainbow color logic starting from Red at number 15
-        const colorIndex = (TOTAL_SECONDS - i) % rainbowColors.length;
+        // Rainbow color logic spanning the full spectrum for the 16 numbers (15 down to 0)
+        // number 15 = index 0 (Red), number 0 = index 15 (Violet)
+        const colorIndex = TOTAL_SECONDS - i;
         applyNeonStyle(div, rainbowColors[colorIndex]);
 
         // Corridor positioning
