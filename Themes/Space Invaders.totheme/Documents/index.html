@@ -476,7 +476,7 @@
       let closestDiverDist = Infinity;
       let closestDiverImpactX = null;
       enemies.forEach(e => {
-        if (!e.alive || !e.diving) return;
+        if (!e.alive || !e.diving || e.scripted) return; // skip scripted divers
         const diverCX = e.x + ENEMY_W / 2;
         const dx = e.diveTargetX - e.x;
         const dy = e.diveTargetY - e.y;
@@ -1263,6 +1263,21 @@
       diver.diveReturnY = H + 70;
     }
 
+    function spawnScriptedDiver() {
+      const alive = enemies.filter(e => e.alive && !e.diving);
+      if (alive.length === 0) return;
+      const diver = alive[Math.floor(Math.random() * alive.length)];
+      diver.diving = true;
+      diver.scripted = true;
+      diver.diveProgress = 0;
+      diver.diveStartX = diver.x + gridX;
+      diver.diveStartY = diver.y + gridY;
+      diver.diveTargetX = player.x + PLAYER_W / 2; // zero miss offset — hits player center
+      diver.diveTargetY = player.y + PLAYER_H / 2;
+      diver.diveReturnX = diver.diveTargetX;
+      diver.diveReturnY = H + 70;
+    }
+
     function updateDivers(delta) {
       if (gamePhase !== 'playing') return;
 
@@ -1293,6 +1308,17 @@
           // Add looping swirl: 2 full sine cycles perpendicular to travel direction
           e.x = baseX + swirlDir * swirlAmp * Math.sin(t * Math.PI * 4);
           e.y = baseY;
+
+          // Scripted diver: check if it has reached the player
+          if (e.scripted && !playerHit.active) {
+            const ddx = e.x - (player.x + PLAYER_W / 2);
+            const ddy = e.y - (player.y + PLAYER_H / 2);
+            if (Math.sqrt(ddx * ddx + ddy * ddy) < 18) {
+              triggerPlayerDeath(player.x, player.y);
+              e.alive = false;
+              e.diving = false;
+            }
+          }
         } else {
           const p2 = e.diveProgress - phase1Dist;
           const phase2Dist = Math.sqrt(
