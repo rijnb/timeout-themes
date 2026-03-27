@@ -960,6 +960,27 @@
       explosions.push({ x, y, color: color || COLOR_EXPLOSION, timer: 0, duration: 600, particles });
     }
 
+    function spawnPlayerExplosion(x, y) {
+      const particles = [];
+      // 45 large standard particles
+      for (let i = 0; i < 45; i++) {
+        const angle = (i / 45) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+        const speed = 60 + Math.random() * 100;
+        const size = 4 + Math.random() * 8;
+        const life = 0.4 + Math.random() * 0.6;
+        const r = Math.random();
+        const col = r < 0.4 ? '#ffffff' : (r < 0.75 ? '#ffdd44' : (r < 0.9 ? '#ff8800' : '#ff3300'));
+        particles.push({ vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, px: x, py: y, size, life, color: col });
+      }
+      // 15 fast sparks
+      for (let i = 0; i < 15; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 180 + Math.random() * 140;
+        particles.push({ vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, px: x, py: y, size: 2, life: 0.2 + Math.random() * 0.4, color: '#ffffff' });
+      }
+      explosions.push({ x, y, color: '#ff8800', timer: 0, duration: 3000, particles, large: true });
+    }
+
     function updateExplosions(delta) {
       const dt = delta / 1000;
       explosions = explosions.filter(e => {
@@ -1013,6 +1034,37 @@
           ctx.beginPath();
           ctx.arc(e.x, e.y, rt * 32, 0, Math.PI * 2);
           ctx.stroke();
+        }
+
+        // Extra rings for large (player) explosions
+        if (e.large && t < 0.5) {
+          const rt2 = Math.max(0, (t - 0.05) / 0.45);
+          if (rt2 > 0) {
+            ctx.globalAlpha = (1 - rt2) * 0.55;
+            ctx.strokeStyle = '#ffdd44';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, rt2 * 70, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          const rt3 = Math.max(0, (t - 0.10) / 0.45);
+          if (rt3 > 0) {
+            ctx.globalAlpha = (1 - rt3) * 0.45;
+            ctx.strokeStyle = '#ff6600';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, rt3 * 110, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          const rt4 = Math.max(0, (t - 0.15) / 0.45);
+          if (rt4 > 0) {
+            ctx.globalAlpha = (1 - rt4) * 0.3;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, rt4 * 150, 0, Math.PI * 2);
+            ctx.stroke();
+          }
         }
 
         ctx.globalAlpha = 1;
