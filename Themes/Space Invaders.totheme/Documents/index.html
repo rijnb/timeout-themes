@@ -505,6 +505,7 @@
       // --- Threat 2: falling bombs ---
       if (!threatened) {
         bombs.forEach(b => {
+          if (b.scripted) return; // don't evade scripted (hit-destined) bombs
           const impactX = predictedImpactX(b.x, b.y, 0, BOMB_SPEED);
           if (impactX !== null && Math.abs(impactX - playerCX) < PLAYER_W + 20) {
             evadeToSafeX(impactX);
@@ -1163,6 +1164,19 @@
       bombs.push({ x: bx, y: by, frame: 0, frameTimer: 0 });
     }
 
+    function spawnScriptedBomb() {
+      // Spawn at the lowest living enemy row Y, directly above the player
+      let lowestY = gridY + 10;
+      enemies.forEach(e => {
+        if (e.alive && !e.diving) {
+          const ey = e.y + gridY + ENEMY_H;
+          if (ey > lowestY) lowestY = ey;
+        }
+      });
+      const bx = player.x + PLAYER_W / 2;
+      bombs.push({ x: bx, y: Math.max(10, lowestY), frame: 0, frameTimer: 0, scripted: true });
+    }
+
     function updateBombs(delta) {
       if (gamePhase !== 'playing') return;
 
@@ -1177,17 +1191,27 @@
         b.frameTimer += delta;
         if (b.frameTimer > 140) { b.frame = 1 - b.frame; b.frameTimer = 0; }
 
-        // Damage barriers
-        barriers.forEach(bar => {
-          bar.blocks.forEach(bl => {
-            if (bl.hp <= 0) return;
-            const bkx = bar.x + bl.c * 10;
-            const bky = bar.y + bl.r * 8;
-            if (b.x >= bkx && b.x <= bkx + 9 && b.y >= bky && b.y <= bky + 7) {
-              bl.hp--;
-            }
+        // Scripted bomb: check if it has reached the player
+        if (b.scripted && !playerHit.active) {
+          if (b.y >= player.y && b.y <= player.y + PLAYER_H + 5) {
+            triggerPlayerDeath(player.x, player.y);
+            return false; // remove bomb on hit
+          }
+        }
+
+        // Damage barriers (skip for scripted bombs)
+        if (!b.scripted) {
+          barriers.forEach(bar => {
+            bar.blocks.forEach(bl => {
+              if (bl.hp <= 0) return;
+              const bkx = bar.x + bl.c * 10;
+              const bky = bar.y + bl.r * 8;
+              if (b.x >= bkx && b.x <= bkx + 9 && b.y >= bky && b.y <= bky + 7) {
+                bl.hp--;
+              }
+            });
           });
-        });
+        }
 
         return b.y < H + 20;
       });
