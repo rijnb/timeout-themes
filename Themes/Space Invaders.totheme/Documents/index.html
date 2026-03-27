@@ -1289,6 +1289,30 @@
     let gamePhase = 'playing';
     let gameOverTimer = 0;
 
+    // --- Player Hit / Lives System ---
+    let lives = 3;
+
+    let playerHit = {
+      active: false,
+      timer: 0,
+      x: 0,
+      y: 0
+    };
+
+    let scheduledHits = [];
+
+    function scheduleHits() {
+      const hit1Time = (25 + Math.random() * 45) * 1000; // 25–70s
+      const minHit2 = Math.max(90000, hit1Time + 40000);
+      const hit2Time = minHit2 + Math.random() * (150000 - minHit2); // 90–150s
+      const types = Math.random() < 0.5 ? ['bomb', 'diver'] : ['diver', 'bomb'];
+      scheduledHits = [
+        { time: hit1Time, type: types[0], triggered: false },
+        { time: hit2Time, type: types[1], triggered: false }
+      ];
+    }
+    scheduleHits();
+
     function checkPhase(delta) {
       const aliveEnemies = enemies.filter(e => e.alive);
       const aliveCount = aliveEnemies.length;
@@ -1375,7 +1399,7 @@
 
         // Bottom Left: Lives
         ctx.textAlign = 'left';
-        ctx.fillText('LIVES: 3', 18, H - 26);
+        ctx.fillText('LIVES: ' + lives, 18, H - 26);
       }
       ctx.shadowBlur = 0;
     }
