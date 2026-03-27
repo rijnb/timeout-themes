@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Stand-up</title>
+<style>
+* { margin: 0; padding: 0; }
+body {
+    background: #2a5caa;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+}
+canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// === CANVAS SETUP ===
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H, dpr, groundY;
+
+function resize() {
+    dpr = window.devicePixelRatio || 1;
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    groundY = H * 0.72;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function setLineStyle() {
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.fillStyle = '#fff';
+}
+
+function drawGroundLine() {
+    ctx.beginPath();
+    ctx.moveTo(0, groundY);
+    ctx.lineTo(W, groundY);
+    ctx.stroke();
+}
+
+// === CHARACTER SYSTEM ===
+function lerp(a, b, t) {
+    return a + (b - a) * t;
+}
+
+function lerpPose(p1, p2, t) {
+    const result = {};
+    for (const key in p1) {
+        if (typeof p1[key] === 'object' && p1[key] !== null) {
+            result[key] = {};
+            for (const sub in p1[key]) {
+                result[key][sub] = lerp(p1[key][sub], p2[key][sub], t);
+            }
+        } else {
+            result[key] = lerp(p1[key], p2[key], t);
+        }
+    }
+    return result;
+}
+
+function smoothstep(t) {
+    return t * t * (3 - 2 * t);
+}
+
+function drawCharacter(pose, x, y, facingLeft) {
+    ctx.save();
+    ctx.translate(x, y);
+    if (facingLeft) ctx.scale(-1, 1);
+
+    const s = H / 800;
+
+    const hip = pose.hip;
+    const shoulder = pose.shoulder;
+    const neck = pose.neck;
+    const head = pose.head;
+    const elbow1 = pose.elbow1;
+    const wrist1 = pose.wrist1;
+    const elbow2 = pose.elbow2;
+    const wrist2 = pose.wrist2;
+    const knee1 = pose.knee1;
+    const ankle1 = pose.ankle1;
+    const foot1 = pose.foot1;
+    const knee2 = pose.knee2;
+    const ankle2 = pose.ankle2;
+    const foot2 = pose.foot2;
+
+    function line(a, b) {
+        ctx.beginPath();
+        ctx.moveTo(a.x * s, a.y * s);
+        ctx.lineTo(b.x * s, b.y * s);
+        ctx.stroke();
+    }
+
+    // Legs
+    line(hip, knee1);
+    line(knee1, ankle1);
+    line(ankle1, foot1);
+    line(hip, knee2);
+    line(knee2, ankle2);
+    line(ankle2, foot2);
+
+    // Torso
+    line(hip, shoulder);
+
+    // Arms
+    line(shoulder, elbow1);
+    line(elbow1, wrist1);
+    line(shoulder, elbow2);
+    line(elbow2, wrist2);
+
+    // Neck
+    line(shoulder, neck);
+
+    // Head
+    const headR = (pose.headRadius || 14) * s;
+    ctx.beginPath();
+    ctx.arc(head.x * s, head.y * s, headR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Nose - prominent La Linea nose
+    const noseX = head.x * s + headR * 0.8;
+    const noseY = head.y * s - headR * 0.05;
+    ctx.beginPath();
+    ctx.moveTo(head.x * s + headR * 0.5, noseY - headR * 0.35);
+    ctx.lineTo(noseX + headR * 0.5, noseY + headR * 0.1);
+    ctx.lineTo(head.x * s + headR * 0.4, noseY + headR * 0.15);
+    ctx.stroke();
+
+    // Eye
+    const eyeX = head.x * s + headR * 0.25;
+    const eyeY = head.y * s - headR * 0.2;
+    ctx.beginPath();
+    ctx.arc(eyeX, eyeY, 2 * s, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+// === ALL POSES ===
+const POSE_STANDING = {
+    hip: {x: 0, y: 0},
+    shoulder: {x: 0, y: -45},
+    neck: {x: 2, y: -52},
+    head: {x: 4, y: -68},
+    headRadius: 14,
+    elbow1: {x: 8, y: -30},
+    wrist1: {x: 6, y: -15},
+    elbow2: {x: -6, y: -30},
+    wrist2: {x: -4, y: -15},
+    knee1: {x: 6, y: 25},
+    ankle1: {x: 4, y: 50},
+    foot1: {x: 12, y: 50},
+    knee2: {x: -4, y: 25},
+    ankle2: {x: -2, y: 50},
+    foot2: {x: 6, y: 50}
+};
+
+const POSE_SITTING = {
+    hip: {x: 0, y: 0},
+    shoulder: {x: -2, y: -45},
+    neck: {x: 0, y: -52},
+    head: {x: 2, y: -68},
+    headRadius: 14,
+    elbow1: {x: 18, y: -32},
+    wrist1: {x: 28, y: -38},
+    elbow2: {x: 14, y: -30},
+    wrist2: {x: 24, y: -36},
+    knee1: {x: 22, y: 2},
+    ankle1: {x: 22, y: 28},
+    foot1: {x: 30, y: 28},
+    knee2: {x: 18, y: 4},
+    ankle2: {x: 18, y: 28},
+    foot2: {x: 26, y: 28}
+};
+
+const POSE_TYPING_A = {
+    ...POSE_SITTING,
+    wrist1: {x: 28, y: -40},
+    wrist2: {x: 24, y: -34}
+};
+
+const POSE_TYPING_B = {
+    ...POSE_SITTING,
+    wrist1: {x: 28, y: -34},
+    wrist2: {x: 24, y: -40}
+};
+
+const POSE_PUSH_BACK = {
+    hip: {x: 0, y: -2},
+    shoulder: {x: -4, y: -45},
+    neck: {x: -2, y: -52},
+    head: {x: 0, y: -68},
+    headRadius: 14,
+    elbow1: {x: 14, y: -34},
+    wrist1: {x: 22, y: -38},
+    elbow2: {x: 10, y: -32},
+    wrist2: {x: 18, y: -36},
+    knee1: {x: 18, y: 6},
+    ankle1: {x: 20, y: 28},
+    foot1: {x: 28, y: 28},
+    knee2: {x: 14, y: 8},
+    ankle2: {x: 16, y: 28},
+    foot2: {x: 24, y: 28}
+};
+
+const POSE_PRESS_BUTTON = {
+    hip: {x: 0, y: 0},
+    shoulder: {x: 0, y: -45},
+    neck: {x: 2, y: -52},
+    head: {x: 4, y: -68},
+    headRadius: 14,
+    elbow1: {x: 18, y: -42},
+    wrist1: {x: 30, y: -38},
+    elbow2: {x: -6, y: -30},
+    wrist2: {x: -4, y: -15},
+    knee1: {x: 6, y: 25},
+    ankle1: {x: 4, y: 50},
+    foot1: {x: 12, y: 50},
+    knee2: {x: -4, y: 25},
+    ankle2: {x: -2, y: 50},
+    foot2: {x: 6, y: 50}
+};
+
+const POSE_WAITING = {
+    hip: {x: 0, y: 0},
+    shoulder: {x: 0, y: -45},
+    neck: {x: 2, y: -52},
+    head: {x: 5, y: -68},
+    headRadius: 14,
+    elbow1: {x: 4, y: -28},
+    wrist1: {x: 2, y: -14},
+    elbow2: {x: -8, y: -28},
+    wrist2: {x: -10, y: -14},
+    knee1: {x: 6, y: 25},
+    ankle1: {x: 4, y: 50},
+    foot1: {x: 12, y: 50},
+    knee2: {x: -6, y: 25},
+    ankle2: {x: -6, y: 50},
+    foot2: {x: -2, y: 50}
+};
+
+const POSE_PICK_CUP = {
+    hip: {x: 0, y: 0},
+    shoulder: {x: 0, y: -45},
+    neck: {x: 2, y: -52},
+    head: {x: 4, y: -68},
+    headRadius: 14,
+    elbow1: {x: 16, y: -30},
+    wrist1: {x: 26, y: -10},
+    elbow2: {x: -6, y: -30},
+    wrist2: {x: -4, y: -15},
+    knee1: {x: 6, y: 25},
+    ankle1: {x: 4, y: 50},
+    foot1: {x: 12, y: 50},
+    knee2: {x: -4, y: 25},
+    ankle2: {x: -2, y: 50},
+    foot2: {x: 6, y: 50}
+};
+
+const POSE_SET_CUP = {
+    hip: {x: 0, y: 0},
+    shoulder: {x: 0, y: -45},
+    neck: {x: 2, y: -52},
+    head: {x: 4, y: -68},
+    headRadius: 14,
+    elbow1: {x: 16, y: -34},
+    wrist1: {x: 26, y: -32},
+    elbow2: {x: -6, y: -30},
+    wrist2: {x: -4, y: -15},
+    knee1: {x: 6, y: 25},
+    ankle1: {x: 4, y: 50},
+    foot1: {x: 12, y: 50},
+    knee2: {x: -4, y: 25},
+    ankle2: {x: -2, y: 50},
+    foot2: {x: 6, y: 50}
+};
+
+const POSE_REACH_KNOB = {
+    hip: {x: 0, y: 0},
+    shoulder: {x: 0, y: -45},
+    neck: {x: -2, y: -52},
+    head: {x: -2, y: -68},
+    headRadius: 14,
+    elbow1: {x: -12, y: -32},
+    wrist1: {x: -22, y: -20},
+    elbow2: {x: -6, y: -30},
+    wrist2: {x: -4, y: -15},
+    knee1: {x: 6, y: 25},
+    ankle1: {x: 4, y: 50},
+    foot1: {x: 12, y: 50},
+    knee2: {x: -4, y: 25},
+    ankle2: {x: -2, y: 50},
+    foot2: {x: 6, y: 50}
+};
+
+const POSE_PUSH_KNOB = {
+    hip: {x: 0, y: 0},
+    shoulder: {x: -2, y: -45},
+    neck: {x: -2, y: -52},
+    head: {x: -2, y: -68},
+    headRadius: 14,
+    elbow1: {x: -14, y: -28},
+    wrist1: {x: -22, y: -14},
+    elbow2: {x: -6, y: -30},
+    wrist2: {x: -4, y: -15},
+    knee1: {x: 6, y: 25},
+    ankle1: {x: 4, y: 50},
+    foot1: {x: 12, y: 50},
+    knee2: {x: -4, y: 25},
+    ankle2: {x: -2, y: 50},
+    foot2: {x: 6, y: 50}
+};
+
+const POSE_STANDING_DESK = {
+    hip: {x: 0, y: 0},
+    shoulder: {x: 0, y: -45},
+    neck: {x: 2, y: -52},
+    head: {x: 4, y: -68},
+    headRadius: 14,
+    elbow1: {x: 14, y: -38},
+    wrist1: {x: 24, y: -44},
+    elbow2: {x: 10, y: -36},
+    wrist2: {x: 20, y: -42},
+    knee1: {x: 4, y: 25},
+    ankle1: {x: 4, y: 50},
+    foot1: {x: 12, y: 50},
+    knee2: {x: -4, y: 25},
+    ankle2: {x: -2, y: 50},
+    foot2: {x: 6, y: 50}
+};
+
+const POSE_STANDING_TYPE_A = {
+    ...POSE_STANDING_DESK,
+    wrist1: {x: 24, y: -46},
+    wrist2: {x: 20, y: -40}
+};
+
+const POSE_STANDING_TYPE_B = {
+    ...POSE_STANDING_DESK,
+    wrist1: {x: 24, y: -40},
+    wrist2: {x: 20, y: -46}
+};
+
+// === WALK CYCLE ===
+const WALK_CONTACT = {
+    hip: {x: 0, y: 2},
+    shoulder: {x: 0, y: -43},
+    neck: {x: 2, y: -50},
+    head: {x: 4, y: -66},
+    headRadius: 14,
+    elbow1: {x: -8, y: -30},
+    wrist1: {x: -12, y: -18},
+    elbow2: {x: 10, y: -30},
+    wrist2: {x: 14, y: -18},
+    knee1: {x: 16, y: 22},
+    ankle1: {x: 20, y: 48},
+    foot1: {x: 28, y: 48},
+    knee2: {x: -14, y: 24},
+    ankle2: {x: -16, y: 48},
+    foot2: {x: -10, y: 48}
+};
+
+const WALK_DOWN = {
+    hip: {x: 0, y: 5},
+    shoulder: {x: 0, y: -40},
+    neck: {x: 2, y: -47},
+    head: {x: 4, y: -63},
+    headRadius: 14,
+    elbow1: {x: -4, y: -28},
+    wrist1: {x: -6, y: -16},
+    elbow2: {x: 6, y: -28},
+    wrist2: {x: 8, y: -16},
+    knee1: {x: 10, y: 26},
+    ankle1: {x: 12, y: 48},
+    foot1: {x: 20, y: 48},
+    knee2: {x: -8, y: 26},
+    ankle2: {x: -10, y: 48},
+    foot2: {x: -4, y: 48}
+};
+
+const WALK_PASSING = {
+    hip: {x: 0, y: 1},
+    shoulder: {x: 0, y: -44},
+    neck: {x: 2, y: -51},
+    head: {x: 4, y: -67},
+    headRadius: 14,
+    elbow1: {x: 4, y: -30},
+    wrist1: {x: 2, y: -16},
+    elbow2: {x: -2, y: -30},
+    wrist2: {x: 0, y: -16},
+    knee1: {x: 4, y: 24},
+    ankle1: {x: 2, y: 50},
+    foot1: {x: 10, y: 50},
+    knee2: {x: -2, y: 18},
+    ankle2: {x: 2, y: 40},
+    foot2: {x: 8, y: 40}
+};
+
+const WALK_UP = {
+    hip: {x: 0, y: -1},
+    shoulder: {x: 0, y: -46},
+    neck: {x: 2, y: -53},
+    head: {x: 4, y: -69},
+    headRadius: 14,
+    elbow1: {x: 10, y: -30},
+    wrist1: {x: 14, y: -18},
+    elbow2: {x: -8, y: -30},
+    wrist2: {x: -12, y: -18},
+    knee1: {x: -14, y: 24},
+    ankle1: {x: -16, y: 48},
+    foot1: {x: -10, y: 48},
+    knee2: {x: 16, y: 22},
+    ankle2: {x: 20, y: 48},
+    foot2: {x: 28, y: 48}
+};
+
+const WALK_CYCLE = [WALK_CONTACT, WALK_DOWN, WALK_PASSING, WALK_UP];
+
+function getWalkPose(cycleTime) {
+    const numPoses = WALK_CYCLE.length;
+    const segment = cycleTime * numPoses;
+    const idx = Math.floor(segment) % numPoses;
+    const frac = segment - Math.floor(segment);
+    const nextIdx = (idx + 1) % numPoses;
+    return lerpPose(WALK_CYCLE[idx], WALK_CYCLE[nextIdx], frac);
+}
+
+function getWalkWithCupPose(cycleTime) {
+    const pose = getWalkPose(cycleTime);
+    pose.elbow1 = {x: 12, y: -36};
+    pose.wrist1 = {x: 18, y: -30};
+    return pose;
+}
+
+// === SCENE OBJECTS ===
+function drawDesk(deskX, surfaceY, s, knobPressed) {
+    const deskW = 100 * s;
+    const legW = 4 * s;
+    const surfaceH = 4 * s;
+    const surfScreenY = groundY + surfaceY * s;
+
+    // Surface
+    ctx.beginPath();
+    ctx.moveTo(deskX, surfScreenY);
+    ctx.lineTo(deskX + deskW, surfScreenY);
+    ctx.lineTo(deskX + deskW, surfScreenY + surfaceH);
+    ctx.lineTo(deskX, surfScreenY + surfaceH);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Left leg
+    ctx.beginPath();
+    ctx.moveTo(deskX + 8 * s, surfScreenY + surfaceH);
+    ctx.lineTo(deskX + 8 * s, groundY);
+    ctx.stroke();
+
+    // Right leg
+    ctx.beginPath();
+    ctx.moveTo(deskX + deskW - 8 * s, surfScreenY + surfaceH);
+    ctx.lineTo(deskX + deskW - 8 * s, groundY);
+    ctx.stroke();
+
+    // Knob/lever
+    const knobX = deskX + 4 * s;
+    const knobBaseY = surfScreenY + 14 * s;
+    const knobLen = 10 * s;
+    const knobAngle = knobPressed ? 0.4 : -0.3;
+    ctx.beginPath();
+    ctx.moveTo(knobX, knobBaseY);
+    ctx.lineTo(knobX - Math.cos(knobAngle) * knobLen, knobBaseY + Math.sin(knobAngle) * knobLen);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(knobX - Math.cos(knobAngle) * knobLen, knobBaseY + Math.sin(knobAngle) * knobLen, 3 * s, 0, Math.PI * 2);
+    ctx.stroke();
+}
+
+function drawMonitor(deskX, surfaceY, s) {
+    const deskW = 100 * s;
+    const monW = 36 * s;
+    const monH = 28 * s;
+    const standW = 6 * s;
+    const standH = 8 * s;
+    const surfScreenY = groundY + surfaceY * s;
+    const monX = deskX + deskW * 0.55 - monW / 2;
+    const monY = surfScreenY - standH - monH;
+
+    ctx.strokeRect(monX, monY, monW, monH);
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.fillRect(monX + 2, monY + 2, monW - 4, monH - 4);
+    ctx.restore();
+
+    const standX = monX + monW / 2 - standW / 2;
+    ctx.strokeRect(standX, monY + monH, standW, standH);
+
+    ctx.beginPath();
+    ctx.moveTo(monX + monW / 2 - 12 * s, surfScreenY);
+    ctx.lineTo(monX + monW / 2 + 12 * s, surfScreenY);
+    ctx.stroke();
+}
+
+function drawKeyboard(deskX, surfaceY, s) {
+    const deskW = 100 * s;
+    const kbW = 30 * s;
+    const kbH = 4 * s;
+    const surfScreenY = groundY + surfaceY * s;
+    const kbX = deskX + deskW * 0.35 - kbW / 2;
+    ctx.strokeRect(kbX, surfScreenY - kbH, kbW, kbH);
+}
+
+function drawChair(chairX, s) {
+    const seatW = 36 * s;
+    const seatH = 4 * s;
+    const seatY = groundY - 28 * s;
+    const backH = 32 * s;
+
+    ctx.strokeRect(chairX, seatY, seatW, seatH);
+
+    ctx.beginPath();
+    ctx.moveTo(chairX, seatY);
+    ctx.lineTo(chairX - 4 * s, seatY - backH);
+    ctx.lineTo(chairX + 4 * s, seatY - backH);
+    ctx.lineTo(chairX + 6 * s, seatY);
+    ctx.stroke();
+
+    const pedestalX = chairX + seatW / 2;
+    ctx.beginPath();
+    ctx.moveTo(pedestalX, seatY + seatH);
+    ctx.lineTo(pedestalX, groundY - 6 * s);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(pedestalX - 16 * s, groundY);
+    ctx.lineTo(pedestalX + 16 * s, groundY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(pedestalX - 14 * s, groundY, 3 * s, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(pedestalX + 14 * s, groundY, 3 * s, 0, Math.PI * 2);
+    ctx.stroke();
+}
+
+function drawCoffeeMachine(machineX, s) {
+    const mW = 30 * s;
+    const mH = 50 * s;
+    const mY = groundY - mH;
+
+    ctx.strokeRect(machineX, mY, mW, mH);
+
+    ctx.beginPath();
+    ctx.arc(machineX + mW / 2, mY + 12 * s, 4 * s, 0, Math.PI * 2);
+    ctx.stroke();
+
+    const spoutW = 8 * s;
+    const spoutH = 4 * s;
+    ctx.strokeRect(machineX + mW / 2 - spoutW / 2, groundY - 18 * s, spoutW, spoutH);
+
+    ctx.beginPath();
+    ctx.moveTo(machineX + 4 * s, groundY - 2 * s);
+    ctx.lineTo(machineX + mW - 4 * s, groundY - 2 * s);
+    ctx.stroke();
+}
+
+function drawCup(cupX, cupY, s) {
+    const cupW = 10 * s;
+    const cupH = 10 * s;
+    const handleR = 4 * s;
+
+    ctx.beginPath();
+    ctx.moveTo(cupX, cupY - cupH);
+    ctx.lineTo(cupX - 2 * s, cupY);
+    ctx.lineTo(cupX + cupW + 2 * s, cupY);
+    ctx.lineTo(cupX + cupW, cupY - cupH);
+    ctx.closePath();
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(cupX + cupW + 2 * s, cupY - cupH / 2, handleR, -Math.PI / 2, Math.PI / 2);
+    ctx.stroke();
+}
+
+function drawCoffeeStream(machineX, progress, s) {
+    const mW = 30 * s;
+    const streamX = machineX + mW / 2;
+    const streamTop = groundY - 14 * s;
+    const streamBottom = groundY - 10 * s;
+    const streamLen = (streamBottom - streamTop) * progress;
+
+    if (progress > 0) {
+        ctx.beginPath();
+        ctx.moveTo(streamX, streamTop);
+        ctx.lineTo(streamX, streamTop + streamLen);
+        ctx.stroke();
+    }
+}
+
+// === MAIN LOOP (placeholder - phases 1-8 will be added in Tasks 6-7) ===
+const startTime = performance.now();
+const DURATION = 60000;
+
+function frame(now) {
+    const elapsed = now - startTime;
+    const tSec = Math.min(elapsed / 1000, 60);
+
+    ctx.clearRect(0, 0, W, H);
+    setLineStyle();
+
+    const s = H / 800;
+    const deskX = W * 0.28;
+
+    drawGroundLine();
+    drawChair(deskX - 24 * s, s);
+    drawDesk(deskX, -30, s, false);
+    drawMonitor(deskX, -30, s);
+    drawKeyboard(deskX, -30, s);
+    drawCoffeeMachine(W * 0.73, s);
+
+    // Show typing animation as default
+    const typeCycle = (elapsed % 400) / 400;
+    const pose = typeCycle < 0.5
+        ? lerpPose(POSE_TYPING_A, POSE_TYPING_B, typeCycle * 2)
+        : lerpPose(POSE_TYPING_B, POSE_TYPING_A, (typeCycle - 0.5) * 2);
+    drawCharacter(pose, deskX + 28 * s, groundY - 28 * s, false);
+
+    requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

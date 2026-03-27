@@ -1,0 +1,18 @@
+{
+  "author": {
+    "name": "Rijn Buve",
+    "email": "rijn@buve.nl",
+    "url": "https://github.com/rijnb/timeout-themes"
+  },
+  "credits": {
+    "name": "Inspired by La Linea by Osvaldo Cavandoli",
+    "url": "https://en.wikipedia.org/wiki/La_Linea_(TV_series)"
+  },
+  "comments": "La Linea style animation of a man converting to a standing desk.",
+  "rootDocument": "index.html",
+  "created": "2026-03-27",
+  "identifier": "com.timeout.theme.stand-up",
+  "version": 1,
+  "modified": "2026-03-27",
+  "name": "Stand-up"
+}
