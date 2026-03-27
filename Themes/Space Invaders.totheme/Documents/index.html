@@ -1193,7 +1193,7 @@
 
         // Scripted bomb: check if it has reached the player
         if (b.scripted && !playerHit.active) {
-          if (b.y >= player.y && b.y <= player.y + PLAYER_H + 5) {
+          if (b.y >= player.y) {
             triggerPlayerDeath(player.x, player.y);
             return false; // remove bomb on hit
           }
