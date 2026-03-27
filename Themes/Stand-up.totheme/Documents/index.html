@@ -612,7 +612,27 @@ function drawCoffeeStream(machineX, progress, s) {
     }
 }
 
-// === MAIN LOOP (placeholder - phases 1-8 will be added in Tasks 6-7) ===
+// === PHASE CONSTANTS (seconds) ===
+const P = {
+    TYPING_END: 10,
+    STANDUP_END: 14,
+    WALK_TO_COFFEE_END: 22,
+    PRESS_BUTTON: 24,
+    POUR_END: 28,
+    PICK_CUP: 30,
+    WALK_BACK_END: 38,
+    SET_CUP: 40,
+    REACH_KNOB: 42,
+    PUSH_KNOB: 44,
+    DESK_RISE_END: 52,
+    END: 60
+};
+
+function breathe(tSec, amplitude) {
+    return Math.sin(tSec * 2.5) * amplitude;
+}
+
+// === MAIN LOOP ===
 const startTime = performance.now();
 const DURATION = 60000;
 
@@ -624,21 +644,290 @@ function frame(now) {
     setLineStyle();
 
     const s = H / 800;
-    const deskX = W * 0.28;
+    const deskLeft = W * 0.28;
+    const deskW = 100 * s;
+    const chairInitX = deskLeft - 24 * s;
+    const machineX = W * 0.73;
+    const machineW = 30 * s;
+    const charSitX = deskLeft + 28 * s;
+    const charStandDeskX = deskLeft + 40 * s;
+    const charAtMachineX = machineX - 10 * s;
 
+    let charX, charY, pose, facingLeft = false;
+    let deskSurfaceY = -30;
+    let knobPressed = false;
+    let showCup = false;
+    let cupX = 0, cupY = 0;
+    let showStream = false;
+    let streamProgress = 0;
+    let chairXOffset = 0;
+    let drawChairThisFrame = true;
+
+    // ---- Phase 1: Sitting and typing (0 - 10s) ----
+    if (tSec < P.TYPING_END) {
+        charX = charSitX;
+        charY = groundY - 28 * s;
+        const typeCycle = (elapsed % 400) / 400;
+        pose = typeCycle < 0.5
+            ? lerpPose(POSE_TYPING_A, POSE_TYPING_B, typeCycle * 2)
+            : lerpPose(POSE_TYPING_B, POSE_TYPING_A, (typeCycle - 0.5) * 2);
+    }
+
+    // ---- Phase 2: Stop typing, push back, stand up (10 - 14s) ----
+    else if (tSec < P.STANDUP_END) {
+        const phaseDur = P.STANDUP_END - P.TYPING_END;
+        const phaseT = (tSec - P.TYPING_END) / phaseDur;
+        const seatY = groundY - 28 * s;
+
+        if (phaseT < 0.4) {
+            // Lerp from sitting to push-back
+            const t = smoothstep(phaseT / 0.4);
+            pose = lerpPose(POSE_SITTING, POSE_PUSH_BACK, t);
+            charX = charSitX;
+            charY = seatY;
+        } else {
+            // Lerp from push-back to standing
+            const t = smoothstep((phaseT - 0.4) / 0.6);
+            pose = lerpPose(POSE_PUSH_BACK, POSE_STANDING, t);
+            charX = lerp(charSitX, charSitX - 10 * s, t);
+            charY = lerp(seatY, groundY, t);
+        }
+    }
+
+    // ---- Phase 3: Walk to coffee machine (14 - 22s) ----
+    else if (tSec < P.WALK_TO_COFFEE_END) {
+        const phaseDur = P.WALK_TO_COFFEE_END - P.STANDUP_END;
+        const phaseT = (tSec - P.STANDUP_END) / phaseDur;
+        const walkStart = charSitX - 10 * s;
+        const walkEnd = charAtMachineX;
+
+        charX = lerp(walkStart, walkEnd, smoothstep(phaseT));
+        charY = groundY;
+        facingLeft = false;
+
+        const cycleTime = ((tSec - P.STANDUP_END) * 1.2) % 1;
+        let walkPose = getWalkPose(cycleTime);
+
+        // Blend in from standing over first 0.5s
+        const blendInT = Math.min((tSec - P.STANDUP_END) / 0.5, 1);
+        if (blendInT < 1) {
+            walkPose = lerpPose(POSE_STANDING, walkPose, smoothstep(blendInT));
+        }
+
+        // Blend out to standing over last 0.5s
+        const timeLeft = P.WALK_TO_COFFEE_END - tSec;
+        if (timeLeft < 0.5) {
+            const blendOutT = 1 - (timeLeft / 0.5);
+            walkPose = lerpPose(walkPose, POSE_STANDING, smoothstep(blendOutT));
+        }
+
+        pose = walkPose;
+    }
+
+    // ---- Phase 4: Get coffee (22 - 30s) ----
+    else if (tSec < P.PICK_CUP) {
+        charX = charAtMachineX;
+        charY = groundY;
+        facingLeft = false;
+
+        const cupOnMachineX = machineX + machineW / 2 - 5 * s;
+        const cupOnMachineY = groundY - 2 * s;
+
+        if (tSec < P.PRESS_BUTTON) {
+            // 22-24s: reach for button
+            const t = smoothstep((tSec - P.WALK_TO_COFFEE_END) / (P.PRESS_BUTTON - P.WALK_TO_COFFEE_END));
+            pose = lerpPose(POSE_STANDING, POSE_PRESS_BUTTON, t);
+        } else if (tSec < P.POUR_END) {
+            // 24-28s: waiting, coffee pours
+            pose = {...POSE_WAITING};
+            const b = breathe(tSec, 1.5);
+            pose.head = {x: POSE_WAITING.head.x + b * 0.5, y: POSE_WAITING.head.y + b};
+            pose.neck = {x: POSE_WAITING.neck.x + b * 0.3, y: POSE_WAITING.neck.y + b * 0.5};
+            pose.shoulder = {x: POSE_WAITING.shoulder.x, y: POSE_WAITING.shoulder.y + b * 0.3};
+
+            showStream = true;
+            streamProgress = (tSec - P.PRESS_BUTTON) / (P.POUR_END - P.PRESS_BUTTON);
+
+            showCup = true;
+            cupX = cupOnMachineX;
+            cupY = cupOnMachineY;
+        } else {
+            // 28-30s: pick up cup
+            const t = smoothstep((tSec - P.POUR_END) / (P.PICK_CUP - P.POUR_END));
+            pose = lerpPose(POSE_WAITING, POSE_PICK_CUP, t);
+
+            showCup = true;
+            // Cup moves from machine to hand
+            const handX = charX + pose.wrist1.x * s;
+            const handY = charY + pose.wrist1.y * s;
+            cupX = lerp(cupOnMachineX, handX, t);
+            cupY = lerp(cupOnMachineY, handY, t);
+        }
+    }
+
+    // ---- Phase 5: Walk back to desk with cup (30 - 38s) ----
+    else if (tSec < P.WALK_BACK_END) {
+        const phaseDur = P.WALK_BACK_END - P.PICK_CUP;
+        const phaseT = (tSec - P.PICK_CUP) / phaseDur;
+
+        charX = lerp(charAtMachineX, charStandDeskX, smoothstep(phaseT));
+        charY = groundY;
+        facingLeft = true;
+
+        const cycleTime = ((tSec - P.PICK_CUP) * 1.2) % 1;
+        let walkPose = getWalkWithCupPose(cycleTime);
+
+        // Blend in from standing over first 0.5s
+        const blendInT = Math.min((tSec - P.PICK_CUP) / 0.5, 1);
+        if (blendInT < 1) {
+            // Create a standing-with-cup pose for blending
+            const standWithCup = {...POSE_STANDING, elbow1: {x: 12, y: -36}, wrist1: {x: 18, y: -30}};
+            walkPose = lerpPose(standWithCup, walkPose, smoothstep(blendInT));
+        }
+
+        // Blend out to standing over last 0.5s, and turn to face right
+        const timeLeft = P.WALK_BACK_END - tSec;
+        if (timeLeft < 0.5) {
+            const blendOutT = 1 - (timeLeft / 0.5);
+            walkPose = lerpPose(walkPose, POSE_STANDING, smoothstep(blendOutT));
+            // Transition facing direction: at the very end, face right
+            if (blendOutT > 0.8) facingLeft = false;
+        }
+
+        pose = walkPose;
+
+        // Cup follows hand (account for facing direction)
+        showCup = true;
+        if (facingLeft) {
+            cupX = charX - pose.wrist1.x * s;
+        } else {
+            cupX = charX + pose.wrist1.x * s;
+        }
+        cupY = charY + pose.wrist1.y * s;
+    }
+
+    // ---- Phase 6: Set cup, reach knob, push knob (38 - 44s) ----
+    else if (tSec < P.PUSH_KNOB) {
+        charX = charStandDeskX;
+        charY = groundY;
+        facingLeft = false;
+
+        const deskSurfScreenY = groundY + deskSurfaceY * s;
+        const cupOnDeskX = deskLeft + 70 * s;
+        const cupOnDeskY = deskSurfScreenY - 10 * s;
+
+        if (tSec < P.SET_CUP) {
+            // 38-40s: set cup down
+            const t = smoothstep((tSec - P.WALK_BACK_END) / (P.SET_CUP - P.WALK_BACK_END));
+            pose = lerpPose(POSE_STANDING, POSE_SET_CUP, t);
+
+            showCup = true;
+            const handX = charX + pose.wrist1.x * s;
+            const handY = charY + pose.wrist1.y * s;
+            cupX = lerp(handX, cupOnDeskX, t);
+            cupY = lerp(handY, cupOnDeskY, t);
+        } else if (tSec < P.REACH_KNOB) {
+            // 40-42s: reach for knob
+            const t = smoothstep((tSec - P.SET_CUP) / (P.REACH_KNOB - P.SET_CUP));
+            pose = lerpPose(POSE_SET_CUP, POSE_REACH_KNOB, t);
+
+            showCup = true;
+            cupX = cupOnDeskX;
+            cupY = cupOnDeskY;
+        } else {
+            // 42-44s: push knob
+            const t = smoothstep((tSec - P.REACH_KNOB) / (P.PUSH_KNOB - P.REACH_KNOB));
+            pose = lerpPose(POSE_REACH_KNOB, POSE_PUSH_KNOB, t);
+
+            if (t > 0.5) knobPressed = true;
+
+            showCup = true;
+            cupX = cupOnDeskX;
+            cupY = cupOnDeskY;
+        }
+    }
+
+    // ---- Phase 7: Desk rises, chair slides away (44 - 52s) ----
+    else if (tSec < P.DESK_RISE_END) {
+        const phaseDur = P.DESK_RISE_END - P.PUSH_KNOB;
+        const phaseT = (tSec - P.PUSH_KNOB) / phaseDur;
+        const eased = smoothstep(phaseT);
+
+        charX = charStandDeskX;
+        charY = groundY;
+        facingLeft = false;
+        knobPressed = true;
+
+        deskSurfaceY = lerp(-30, -65, eased);
+        chairXOffset = eased * -200 * s;
+
+        pose = lerpPose(POSE_PUSH_KNOB, POSE_STANDING_DESK, eased);
+
+        showCup = true;
+        const deskSurfScreenY = groundY + deskSurfaceY * s;
+        cupX = deskLeft + 70 * s;
+        cupY = deskSurfScreenY - 10 * s;
+    }
+
+    // ---- Phase 8: Standing at desk, typing (52 - 60s) ----
+    else {
+        charX = charStandDeskX;
+        charY = groundY;
+        facingLeft = false;
+        knobPressed = true;
+        deskSurfaceY = -65;
+        drawChairThisFrame = false;
+
+        const typeCycle = (elapsed % 400) / 400;
+        pose = typeCycle < 0.5
+            ? lerpPose(POSE_STANDING_TYPE_A, POSE_STANDING_TYPE_B, typeCycle * 2)
+            : lerpPose(POSE_STANDING_TYPE_B, POSE_STANDING_TYPE_A, (typeCycle - 0.5) * 2);
+
+        // Subtle head look-at-screen motion
+        const b = breathe(tSec, 1);
+        pose = {...pose};
+        pose.head = {x: pose.head.x + b * 0.3, y: pose.head.y + b * 0.5};
+        pose.neck = {x: pose.neck.x + b * 0.2, y: pose.neck.y + b * 0.3};
+
+        showCup = true;
+        const deskSurfScreenY = groundY + deskSurfaceY * s;
+        cupX = deskLeft + 70 * s;
+        cupY = deskSurfScreenY - 10 * s;
+    }
+
+    // === DRAWING ORDER ===
+    // 1. Ground line
     drawGroundLine();
-    drawChair(deskX - 24 * s, s);
-    drawDesk(deskX, -30, s, false);
-    drawMonitor(deskX, -30, s);
-    drawKeyboard(deskX, -30, s);
-    drawCoffeeMachine(W * 0.73, s);
 
-    // Show typing animation as default
-    const typeCycle = (elapsed % 400) / 400;
-    const pose = typeCycle < 0.5
-        ? lerpPose(POSE_TYPING_A, POSE_TYPING_B, typeCycle * 2)
-        : lerpPose(POSE_TYPING_B, POSE_TYPING_A, (typeCycle - 0.5) * 2);
-    drawCharacter(pose, deskX + 28 * s, groundY - 28 * s, false);
+    // 2. Chair (if visible)
+    if (drawChairThisFrame) {
+        drawChair(chairInitX + chairXOffset, s);
+    }
+
+    // 3. Desk
+    drawDesk(deskLeft, deskSurfaceY, s, knobPressed);
+
+    // 4. Monitor
+    drawMonitor(deskLeft, deskSurfaceY, s);
+
+    // 5. Keyboard
+    drawKeyboard(deskLeft, deskSurfaceY, s);
+
+    // 6. Coffee machine
+    drawCoffeeMachine(machineX, s);
+
+    // 7. Coffee stream (if pouring)
+    if (showStream) {
+        drawCoffeeStream(machineX, streamProgress, s);
+    }
+
+    // 8. Cup (if visible)
+    if (showCup) {
+        drawCup(cupX, cupY, s);
+    }
+
+    // 9. Character
+    drawCharacter(pose, charX, charY, facingLeft);
 
     requestAnimationFrame(frame);
 }
