@@ -38,21 +38,6 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-function setLineStyle() {
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.fillStyle = '#fff';
-}
-
-function drawGroundLine() {
-    ctx.beginPath();
-    ctx.moveTo(0, groundY);
-    ctx.lineTo(W, groundY);
-    ctx.stroke();
-}
-
 // === CHARACTER SYSTEM ===
 function lerp(a, b, t) {
     return a + (b - a) * t;
@@ -75,80 +60,6 @@ function lerpPose(p1, p2, t) {
 
 function smoothstep(t) {
     return t * t * (3 - 2 * t);
-}
-
-function drawCharacter(pose, x, y, facingLeft) {
-    ctx.save();
-    ctx.translate(x, y);
-    if (facingLeft) ctx.scale(-1, 1);
-
-    const s = H / 800;
-
-    const hip = pose.hip;
-    const shoulder = pose.shoulder;
-    const neck = pose.neck;
-    const head = pose.head;
-    const elbow1 = pose.elbow1;
-    const wrist1 = pose.wrist1;
-    const elbow2 = pose.elbow2;
-    const wrist2 = pose.wrist2;
-    const knee1 = pose.knee1;
-    const ankle1 = pose.ankle1;
-    const foot1 = pose.foot1;
-    const knee2 = pose.knee2;
-    const ankle2 = pose.ankle2;
-    const foot2 = pose.foot2;
-
-    function line(a, b) {
-        ctx.beginPath();
-        ctx.moveTo(a.x * s, a.y * s);
-        ctx.lineTo(b.x * s, b.y * s);
-        ctx.stroke();
-    }
-
-    // Legs
-    line(hip, knee1);
-    line(knee1, ankle1);
-    line(ankle1, foot1);
-    line(hip, knee2);
-    line(knee2, ankle2);
-    line(ankle2, foot2);
-
-    // Torso
-    line(hip, shoulder);
-
-    // Arms
-    line(shoulder, elbow1);
-    line(elbow1, wrist1);
-    line(shoulder, elbow2);
-    line(elbow2, wrist2);
-
-    // Neck
-    line(shoulder, neck);
-
-    // Head
-    const headR = (pose.headRadius || 14) * s;
-    ctx.beginPath();
-    ctx.arc(head.x * s, head.y * s, headR, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Nose - prominent La Linea nose
-    const noseX = head.x * s + headR * 0.8;
-    const noseY = head.y * s - headR * 0.05;
-    ctx.beginPath();
-    ctx.moveTo(head.x * s + headR * 0.5, noseY - headR * 0.35);
-    ctx.lineTo(noseX + headR * 0.5, noseY + headR * 0.1);
-    ctx.lineTo(head.x * s + headR * 0.4, noseY + headR * 0.15);
-    ctx.stroke();
-
-    // Eye
-    const eyeX = head.x * s + headR * 0.25;
-    const eyeY = head.y * s - headR * 0.2;
-    ctx.beginPath();
-    ctx.arc(eyeX, eyeY, 2 * s, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.restore();
 }
 
 // === ALL POSES ===
@@ -447,168 +358,236 @@ function getWalkWithCupPose(cycleTime) {
     return pose;
 }
 
-// === SCENE OBJECTS ===
-function drawDesk(deskX, surfaceY, s, knobPressed) {
-    const deskW = 100 * s;
-    const surfaceH = 4 * s;
-    const surfScreenY = groundY + surfaceY * s;
+// === CONTOUR FUNCTIONS ===
+function characterContour(pose, charX, s, facingLeft) {
+    const HR = (pose.headRadius || 14);
+    const BW = 5;
+    const LW = 2.5;
+    const NW = 3;
 
-    // Surface
-    ctx.beginPath();
-    ctx.moveTo(deskX, surfScreenY);
-    ctx.lineTo(deskX + deskW, surfScreenY);
-    ctx.lineTo(deskX + deskW, surfScreenY + surfaceH);
-    ctx.lineTo(deskX, surfScreenY + surfaceH);
-    ctx.closePath();
-    ctx.stroke();
+    const maxFootY = Math.max(pose.foot1.y, pose.foot2.y);
+    const charBaseY = groundY - maxFootY * s;
 
-    // Left leg
-    ctx.beginPath();
-    ctx.moveTo(deskX + 8 * s, surfScreenY + surfaceH);
-    ctx.lineTo(deskX + 8 * s, groundY);
-    ctx.stroke();
+    let bFoot, bAnkle, bKnee, fFoot, fAnkle, fKnee;
+    if (pose.foot1.x <= pose.foot2.x) {
+        bFoot = pose.foot1; bAnkle = pose.ankle1; bKnee = pose.knee1;
+        fFoot = pose.foot2; fAnkle = pose.ankle2; fKnee = pose.knee2;
+    } else {
+        bFoot = pose.foot2; bAnkle = pose.ankle2; bKnee = pose.knee2;
+        fFoot = pose.foot1; fAnkle = pose.ankle1; fKnee = pose.knee1;
+    }
 
-    // Right leg
-    ctx.beginPath();
-    ctx.moveTo(deskX + deskW - 8 * s, surfScreenY + surfaceH);
-    ctx.lineTo(deskX + deskW - 8 * s, groundY);
-    ctx.stroke();
+    const local = [];
 
-    // Knob/lever
-    const knobX = deskX + 4 * s;
-    const knobBaseY = surfScreenY + 14 * s;
-    const knobLen = 10 * s;
-    const knobAngle = knobPressed ? 0.4 : -0.3;
-    ctx.beginPath();
-    ctx.moveTo(knobX, knobBaseY);
-    ctx.lineTo(knobX - Math.cos(knobAngle) * knobLen, knobBaseY + Math.sin(knobAngle) * knobLen);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(knobX - Math.cos(knobAngle) * knobLen, knobBaseY + Math.sin(knobAngle) * knobLen, 3 * s, 0, Math.PI * 2);
-    ctx.stroke();
+    // === BACK SIDE going UP ===
+    local.push({x: bFoot.x, y: maxFootY});
+    local.push({x: bAnkle.x - LW, y: bAnkle.y});
+    local.push({x: bKnee.x - LW, y: bKnee.y});
+    local.push({x: pose.hip.x - BW, y: pose.hip.y});
+
+    const backArmExtent = Math.min(pose.wrist2.x, pose.elbow2.x);
+    if (backArmExtent < pose.shoulder.x - BW - 3) {
+        local.push({x: pose.shoulder.x - BW, y: pose.shoulder.y});
+        local.push({x: pose.elbow2.x - LW, y: pose.elbow2.y});
+        local.push({x: pose.wrist2.x - LW, y: pose.wrist2.y});
+        local.push({x: pose.wrist2.x - LW, y: pose.wrist2.y - 3});
+        local.push({x: pose.elbow2.x - LW, y: pose.elbow2.y - 3});
+        local.push({x: pose.shoulder.x - BW, y: pose.shoulder.y - 2});
+    } else {
+        local.push({x: pose.shoulder.x - BW, y: pose.shoulder.y});
+    }
+
+    local.push({x: pose.neck.x - NW, y: pose.neck.y});
+
+    // === HEAD ARC ===
+    const hx = pose.head.x;
+    const hy = pose.head.y;
+
+    for (let deg = 220; deg >= 90; deg -= 20) {
+        const a = deg * Math.PI / 180;
+        local.push({x: hx + HR * Math.cos(a), y: hy - HR * Math.sin(a)});
+    }
+
+    for (let deg = 70; deg >= 20; deg -= 25) {
+        const a = deg * Math.PI / 180;
+        local.push({x: hx + HR * Math.cos(a), y: hy - HR * Math.sin(a)});
+    }
+
+    // LA LINEA NOSE
+    local.push({x: hx + HR * 0.85, y: hy - HR * 0.25});
+    local.push({x: hx + HR * 1.5, y: hy + HR * 0.1});
+    local.push({x: hx + HR * 0.65, y: hy + HR * 0.25});
+
+    for (let deg = 345; deg >= 300; deg -= 22) {
+        const a = deg * Math.PI / 180;
+        local.push({x: hx + HR * Math.cos(a), y: hy - HR * Math.sin(a)});
+    }
+
+    // === FRONT SIDE going DOWN ===
+    local.push({x: pose.neck.x + NW, y: pose.neck.y});
+
+    const frontArmExtent = Math.max(pose.wrist1.x, pose.elbow1.x);
+    if (frontArmExtent > pose.shoulder.x + BW + 4) {
+        local.push({x: pose.shoulder.x + BW, y: pose.shoulder.y});
+        local.push({x: pose.elbow1.x + LW, y: pose.elbow1.y});
+        local.push({x: pose.wrist1.x + LW, y: pose.wrist1.y});
+        local.push({x: pose.wrist1.x + LW, y: pose.wrist1.y + 4});
+        local.push({x: pose.elbow1.x + LW, y: pose.elbow1.y + 4});
+        local.push({x: pose.shoulder.x + BW, y: pose.shoulder.y + 2});
+    } else {
+        local.push({x: pose.shoulder.x + BW, y: pose.shoulder.y});
+    }
+
+    local.push({x: pose.hip.x + BW, y: pose.hip.y});
+    local.push({x: fKnee.x + LW, y: fKnee.y});
+    local.push({x: fAnkle.x + LW, y: fAnkle.y});
+    local.push({x: fFoot.x, y: maxFootY});
+
+    const screen = local.map(p => ({
+        x: facingLeft ? charX - p.x * s : charX + p.x * s,
+        y: charBaseY + p.y * s
+    }));
+
+    if (screen[0].x > screen[screen.length - 1].x) {
+        screen.reverse();
+    }
+
+    return screen;
 }
 
-function drawMonitor(deskX, surfaceY, s) {
+function deskContour(deskLeft, surfaceY, s, options) {
     const deskW = 100 * s;
+    const surfH = 4 * s;
+    const surfScreenY = groundY + surfaceY * s;
     const monW = 36 * s;
     const monH = 28 * s;
     const standW = 6 * s;
     const standH = 8 * s;
-    const surfScreenY = groundY + surfaceY * s;
-    const monX = deskX + deskW * 0.55 - monW / 2;
+    const monCenterX = deskLeft + deskW * 0.55;
+    const monX = monCenterX - monW / 2;
     const monY = surfScreenY - standH - monH;
-
-    ctx.strokeRect(monX, monY, monW, monH);
-
-    ctx.save();
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
-    ctx.fillRect(monX + 2, monY + 2, monW - 4, monH - 4);
-    ctx.restore();
-
-    const standX = monX + monW / 2 - standW / 2;
-    ctx.strokeRect(standX, monY + monH, standW, standH);
-
-    ctx.beginPath();
-    ctx.moveTo(monX + monW / 2 - 12 * s, surfScreenY);
-    ctx.lineTo(monX + monW / 2 + 12 * s, surfScreenY);
-    ctx.stroke();
-}
-
-function drawKeyboard(deskX, surfaceY, s) {
-    const deskW = 100 * s;
+    const standX = monCenterX - standW / 2;
     const kbW = 30 * s;
     const kbH = 4 * s;
-    const surfScreenY = groundY + surfaceY * s;
-    const kbX = deskX + deskW * 0.35 - kbW / 2;
-    ctx.strokeRect(kbX, surfScreenY - kbH, kbW, kbH);
+    const kbX = deskLeft + deskW * 0.35 - kbW / 2;
+
+    const pts = [];
+
+    // Left leg from ground
+    pts.push({x: deskLeft + 8 * s, y: groundY});
+    pts.push({x: deskLeft + 8 * s, y: surfScreenY + surfH});
+
+    // Surface left edge
+    pts.push({x: deskLeft, y: surfScreenY + surfH});
+    pts.push({x: deskLeft, y: surfScreenY});
+
+    // Keyboard bump on surface
+    pts.push({x: kbX, y: surfScreenY});
+    pts.push({x: kbX, y: surfScreenY - kbH});
+    pts.push({x: kbX + kbW, y: surfScreenY - kbH});
+    pts.push({x: kbX + kbW, y: surfScreenY});
+
+    // Optional cup bump on surface
+    if (options && options.showCup) {
+        const cupX = options.cupLocalX || (deskLeft + 70 * s);
+        const cupW = 10 * s;
+        const cupH = 10 * s;
+        pts.push({x: cupX, y: surfScreenY});
+        pts.push({x: cupX, y: surfScreenY - cupH});
+        pts.push({x: cupX + cupW, y: surfScreenY - cupH});
+        pts.push({x: cupX + cupW, y: surfScreenY});
+    }
+
+    // Monitor: base -> stand -> screen -> stand -> base
+    pts.push({x: monCenterX - 12 * s, y: surfScreenY});
+    pts.push({x: standX, y: surfScreenY});
+    pts.push({x: standX, y: monY + monH});
+    pts.push({x: monX, y: monY + monH});
+    pts.push({x: monX, y: monY});
+    pts.push({x: monX + monW, y: monY});
+    pts.push({x: monX + monW, y: monY + monH});
+    pts.push({x: standX + standW, y: monY + monH});
+    pts.push({x: standX + standW, y: surfScreenY});
+    pts.push({x: monCenterX + 12 * s, y: surfScreenY});
+
+    // Surface right edge
+    pts.push({x: deskLeft + deskW, y: surfScreenY});
+    pts.push({x: deskLeft + deskW, y: surfScreenY + surfH});
+
+    // Right leg to ground
+    pts.push({x: deskLeft + deskW - 8 * s, y: surfScreenY + surfH});
+    pts.push({x: deskLeft + deskW - 8 * s, y: groundY});
+
+    return pts;
 }
 
-function drawChair(chairX, s) {
+function chairContour(chairX, s) {
     const seatW = 36 * s;
-    const seatH = 4 * s;
     const seatY = groundY - 28 * s;
     const backH = 32 * s;
 
-    ctx.strokeRect(chairX, seatY, seatW, seatH);
+    const pts = [];
+    pts.push({x: chairX + 2 * s, y: groundY});
+    pts.push({x: chairX - 4 * s, y: seatY - backH});
+    pts.push({x: chairX + 6 * s, y: seatY - backH});
+    pts.push({x: chairX + 8 * s, y: seatY});
+    pts.push({x: chairX + seatW, y: seatY});
+    pts.push({x: chairX + seatW, y: seatY + 4 * s});
+    pts.push({x: chairX + seatW - 2 * s, y: groundY});
 
-    ctx.beginPath();
-    ctx.moveTo(chairX, seatY);
-    ctx.lineTo(chairX - 4 * s, seatY - backH);
-    ctx.lineTo(chairX + 4 * s, seatY - backH);
-    ctx.lineTo(chairX + 6 * s, seatY);
-    ctx.stroke();
-
-    const pedestalX = chairX + seatW / 2;
-    ctx.beginPath();
-    ctx.moveTo(pedestalX, seatY + seatH);
-    ctx.lineTo(pedestalX, groundY - 6 * s);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(pedestalX - 16 * s, groundY);
-    ctx.lineTo(pedestalX + 16 * s, groundY);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(pedestalX - 14 * s, groundY, 3 * s, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(pedestalX + 14 * s, groundY, 3 * s, 0, Math.PI * 2);
-    ctx.stroke();
+    return pts;
 }
 
-function drawCoffeeMachine(machineX, s) {
+function coffeeMachineContour(machineX, s, options) {
     const mW = 30 * s;
     const mH = 50 * s;
     const mY = groundY - mH;
 
-    ctx.strokeRect(machineX, mY, mW, mH);
+    const pts = [];
+    pts.push({x: machineX, y: groundY});
+    pts.push({x: machineX, y: mY});
+    pts.push({x: machineX + mW, y: mY});
+    pts.push({x: machineX + mW, y: groundY});
 
-    ctx.beginPath();
-    ctx.arc(machineX + mW / 2, mY + 12 * s, 4 * s, 0, Math.PI * 2);
-    ctx.stroke();
-
-    const spoutW = 8 * s;
-    const spoutH = 4 * s;
-    ctx.strokeRect(machineX + mW / 2 - spoutW / 2, groundY - 18 * s, spoutW, spoutH);
-
-    ctx.beginPath();
-    ctx.moveTo(machineX + 4 * s, groundY - 2 * s);
-    ctx.lineTo(machineX + mW - 4 * s, groundY - 2 * s);
-    ctx.stroke();
+    return pts;
 }
 
-function drawCup(cupX, cupY, s) {
-    const cupW = 10 * s;
-    const cupH = 10 * s;
-    const handleR = 4 * s;
+function drawEye(pose, charX, s, facingLeft) {
+    const HR = (pose.headRadius || 14) * s;
+    const maxFootY = Math.max(pose.foot1.y, pose.foot2.y);
+    const charBaseY = groundY - maxFootY * s;
+    const headScreenX = facingLeft ? charX - pose.head.x * s : charX + pose.head.x * s;
+    const headScreenY = charBaseY + pose.head.y * s;
+
+    const eyeOffX = HR * 0.3 * (facingLeft ? -1 : 1);
+    const eyeOffY = -HR * 0.2;
 
     ctx.beginPath();
-    ctx.moveTo(cupX, cupY - cupH);
-    ctx.lineTo(cupX - 2 * s, cupY);
-    ctx.lineTo(cupX + cupW + 2 * s, cupY);
-    ctx.lineTo(cupX + cupW, cupY - cupH);
-    ctx.closePath();
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(cupX + cupW + 2 * s, cupY - cupH / 2, handleR, -Math.PI / 2, Math.PI / 2);
-    ctx.stroke();
+    ctx.arc(headScreenX + eyeOffX, headScreenY + eyeOffY, Math.max(1.5, 2 * (H/800)), 0, Math.PI * 2);
+    ctx.fill();
 }
 
-function drawCoffeeStream(machineX, progress, s) {
-    const mW = 30 * s;
-    const streamX = machineX + mW / 2;
-    const streamTop = groundY - 14 * s;
-    const streamBottom = groundY - 10 * s;
-    const streamLen = (streamBottom - streamTop) * progress;
+function drawScene(contours) {
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.fillStyle = '#fff';
 
-    if (progress > 0) {
-        ctx.beginPath();
-        ctx.moveTo(streamX, streamTop);
-        ctx.lineTo(streamX, streamTop + streamLen);
-        ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, groundY);
+
+    for (const pts of contours) {
+        if (pts.length === 0) continue;
+        ctx.lineTo(pts[0].x, groundY);
+        for (const p of pts) {
+            ctx.lineTo(p.x, p.y);
+        }
+        ctx.lineTo(pts[pts.length - 1].x, groundY);
     }
+
+    ctx.lineTo(W, groundY);
+    ctx.stroke();
 }
 
 // === PHASE CONSTANTS (seconds) ===
@@ -640,7 +619,6 @@ function frame(now) {
     const tSec = Math.min(elapsed / 1000, 60);
 
     ctx.clearRect(0, 0, W, H);
-    setLineStyle();
 
     const s = H / 800;
     const deskLeft = W * 0.28;
@@ -652,7 +630,7 @@ function frame(now) {
     const charStandDeskX = deskLeft + 40 * s;
     const charAtMachineX = machineX - 10 * s;
 
-    let charX, charY, pose, facingLeft = false;
+    let charX, pose, facingLeft = false;
     let deskSurfaceY = -30;
     let knobPressed = false;
     let showCup = false;
@@ -665,7 +643,6 @@ function frame(now) {
     // ---- Phase 1: Sitting and typing (0 - 10s) ----
     if (tSec < P.TYPING_END) {
         charX = charSitX;
-        charY = groundY - 28 * s;
         const typeCycle = (elapsed % 400) / 400;
         pose = typeCycle < 0.5
             ? lerpPose(POSE_TYPING_A, POSE_TYPING_B, typeCycle * 2)
@@ -681,20 +658,17 @@ function frame(now) {
     else if (tSec < P.STANDUP_END) {
         const phaseDur = P.STANDUP_END - P.TYPING_END;
         const phaseT = (tSec - P.TYPING_END) / phaseDur;
-        const seatY = groundY - 28 * s;
 
         if (phaseT < 0.4) {
             // Lerp from sitting to push-back
             const t = smoothstep(phaseT / 0.4);
             pose = lerpPose(POSE_SITTING, POSE_PUSH_BACK, t);
             charX = charSitX;
-            charY = seatY;
         } else {
             // Lerp from push-back to standing
             const t = smoothstep((phaseT - 0.4) / 0.6);
             pose = lerpPose(POSE_PUSH_BACK, POSE_STANDING, t);
             charX = lerp(charSitX, charSitX - 10 * s, t);
-            charY = lerp(seatY, groundY, t);
         }
     }
 
@@ -706,7 +680,6 @@ function frame(now) {
         const walkEnd = charAtMachineX;
 
         charX = lerp(walkStart, walkEnd, smoothstep(phaseT));
-        charY = groundY;
         facingLeft = false;
 
         const cycleTime = ((tSec - P.STANDUP_END) * 1.2) % 1;
@@ -731,7 +704,6 @@ function frame(now) {
     // ---- Phase 4: Get coffee (22 - 30s) ----
     else if (tSec < P.PICK_CUP) {
         charX = charAtMachineX;
-        charY = groundY;
         facingLeft = false;
 
         const cupOnMachineX = machineX + machineW / 2 - 5 * s;
@@ -767,8 +739,9 @@ function frame(now) {
 
             showCup = true;
             // Cup moves from machine to hand
+            const maxFY4 = Math.max(pose.foot1.y, pose.foot2.y);
             const handX = charX + pose.wrist1.x * s;
-            const handY = charY + pose.wrist1.y * s;
+            const handY = (groundY - maxFY4 * s) + pose.wrist1.y * s;
             cupX = lerp(cupOnMachineX, handX, t);
             cupY = lerp(cupOnMachineY, handY, t);
         }
@@ -780,7 +753,6 @@ function frame(now) {
         const phaseT = (tSec - P.PICK_CUP) / phaseDur;
 
         charX = lerp(charAtMachineX, charStandDeskX, smoothstep(phaseT));
-        charY = groundY;
         facingLeft = true;
 
         const cycleTime = ((tSec - P.PICK_CUP) * 1.2) % 1;
@@ -812,13 +784,13 @@ function frame(now) {
         } else {
             cupX = charX + pose.wrist1.x * s;
         }
-        cupY = charY + pose.wrist1.y * s;
+        const maxFY5 = Math.max(pose.foot1.y, pose.foot2.y);
+        cupY = (groundY - maxFY5 * s) + pose.wrist1.y * s;
     }
 
     // ---- Phase 6: Set cup, reach knob, push knob (38 - 44s) ----
     else if (tSec < P.PUSH_KNOB) {
         charX = charStandDeskX;
-        charY = groundY;
         facingLeft = false;
 
         const deskSurfScreenY = groundY + deskSurfaceY * s;
@@ -831,8 +803,9 @@ function frame(now) {
             pose = lerpPose(POSE_STANDING, POSE_SET_CUP, t);
 
             showCup = true;
+            const maxFY6 = Math.max(pose.foot1.y, pose.foot2.y);
             const handX = charX + pose.wrist1.x * s;
-            const handY = charY + pose.wrist1.y * s;
+            const handY = (groundY - maxFY6 * s) + pose.wrist1.y * s;
             cupX = lerp(handX, cupOnDeskX, t);
             cupY = lerp(handY, cupOnDeskY, t);
         } else if (tSec < P.REACH_KNOB) {
@@ -863,7 +836,6 @@ function frame(now) {
         const eased = smoothstep(phaseT);
 
         charX = charStandDeskX;
-        charY = groundY;
         facingLeft = false;
         knobPressed = true;
 
@@ -881,7 +853,6 @@ function frame(now) {
     // ---- Phase 8: Standing at desk, typing (52 - 60s) ----
     else {
         charX = charStandDeskX;
-        charY = groundY;
         facingLeft = false;
         knobPressed = true;
         deskSurfaceY = -65;
@@ -904,39 +875,88 @@ function frame(now) {
         cupY = deskSurfScreenY - 10 * s;
     }
 
-    // === DRAWING ORDER ===
-    // 1. Ground line
-    drawGroundLine();
+    // Compute character base Y (hip position) for cup calculations
+    const charBaseY = groundY - Math.max(pose.foot1.y, pose.foot2.y) * s;
 
-    // 2. Chair (if visible)
+    // === ASSEMBLE CONTOURS (left to right) ===
+    const contours = [];
+
+    // Chair (if visible)
     if (drawChairThisFrame) {
-        drawChair(chairInitX + chairXOffset, s);
+        contours.push({
+            sortX: chairInitX + chairXOffset,
+            pts: chairContour(chairInitX + chairXOffset, s)
+        });
     }
 
-    // 3. Desk
-    drawDesk(deskLeft, deskSurfaceY, s, knobPressed);
+    // Character
+    contours.push({
+        sortX: charX,
+        pts: characterContour(pose, charX, s, facingLeft)
+    });
 
-    // 4. Monitor
-    drawMonitor(deskLeft, deskSurfaceY, s);
+    // Desk (with cup if on desk)
+    const cupOnDesk = showCup && !showStream && tSec >= P.SET_CUP;
+    contours.push({
+        sortX: deskLeft,
+        pts: deskContour(deskLeft, deskSurfaceY, s, {
+            showCup: cupOnDesk,
+            cupLocalX: deskLeft + 70 * s
+        })
+    });
 
-    // 5. Keyboard
-    drawKeyboard(deskLeft, deskSurfaceY, s);
+    // Coffee machine
+    contours.push({
+        sortX: machineX,
+        pts: coffeeMachineContour(machineX, s, {})
+    });
 
-    // 6. Coffee machine
-    drawCoffeeMachine(machineX, s);
+    // Sort left to right
+    contours.sort((a, b) => a.sortX - b.sortX);
 
-    // 7. Coffee stream (if pouring)
+    // Draw the single line
+    drawScene(contours.map(c => c.pts));
+
+    // Draw eye (separate from main line, authentic La Linea)
+    drawEye(pose, charX, s, facingLeft);
+
+    // Draw cup in hand during walking/carrying (as separate small element)
+    if (showCup && tSec >= P.PICK_CUP && tSec < P.SET_CUP) {
+        const cupW = 8 * (H/800);
+        const cupH = 8 * (H/800);
+        ctx.beginPath();
+        ctx.moveTo(cupX, cupY - cupH);
+        ctx.lineTo(cupX - 1.5 * (H/800), cupY);
+        ctx.lineTo(cupX + cupW + 1.5 * (H/800), cupY);
+        ctx.lineTo(cupX + cupW, cupY - cupH);
+        ctx.closePath();
+        ctx.stroke();
+    }
+
+    // Coffee stream during pour
     if (showStream) {
-        drawCoffeeStream(machineX, streamProgress, s);
+        const mW = 30 * s;
+        const streamX = machineX + mW / 2;
+        const streamTop = groundY - 14 * s;
+        const streamBottom = groundY - 4 * s;
+        ctx.beginPath();
+        ctx.moveTo(streamX, streamTop);
+        ctx.lineTo(streamX, streamTop + (streamBottom - streamTop) * streamProgress);
+        ctx.stroke();
     }
 
-    // 8. Cup (if visible)
-    if (showCup) {
-        drawCup(cupX, cupY, s);
+    // Cup on machine drip tray (before pickup, drawn separately)
+    if (showCup && tSec < P.PICK_CUP) {
+        const cupW = 8 * (H/800);
+        const cupH = 8 * (H/800);
+        ctx.beginPath();
+        ctx.moveTo(cupX, cupY - cupH);
+        ctx.lineTo(cupX - 1.5 * (H/800), cupY);
+        ctx.lineTo(cupX + cupW + 1.5 * (H/800), cupY);
+        ctx.lineTo(cupX + cupW, cupY - cupH);
+        ctx.closePath();
+        ctx.stroke();
     }
-
-    // 9. Character
-    drawCharacter(pose, charX, charY, facingLeft);
 
     requestAnimationFrame(frame);
 }
