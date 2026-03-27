@@ -450,7 +450,6 @@ function getWalkWithCupPose(cycleTime) {
 // === SCENE OBJECTS ===
 function drawDesk(deskX, surfaceY, s, knobPressed) {
     const deskW = 100 * s;
-    const legW = 4 * s;
     const surfaceH = 4 * s;
     const surfScreenY = groundY + surfaceY * s;
 
@@ -671,6 +670,11 @@ function frame(now) {
         pose = typeCycle < 0.5
             ? lerpPose(POSE_TYPING_A, POSE_TYPING_B, typeCycle * 2)
             : lerpPose(POSE_TYPING_B, POSE_TYPING_A, (typeCycle - 0.5) * 2);
+
+        // Subtle body sway to avoid stiffness
+        const sway = breathe(tSec, 0.5);
+        pose = {...pose};
+        pose.shoulder = {x: pose.shoulder.x, y: pose.shoulder.y + sway};
     }
 
     // ---- Phase 2: Stop typing, push back, stand up (10 - 14s) ----
@@ -737,6 +741,11 @@ function frame(now) {
             // 22-24s: reach for button
             const t = smoothstep((tSec - P.WALK_TO_COFFEE_END) / (P.PRESS_BUTTON - P.WALK_TO_COFFEE_END));
             pose = lerpPose(POSE_STANDING, POSE_PRESS_BUTTON, t);
+
+            // Show cup sitting on the drip tray
+            showCup = true;
+            cupX = cupOnMachineX;
+            cupY = cupOnMachineY;
         } else if (tSec < P.POUR_END) {
             // 24-28s: waiting, coffee pours
             pose = {...POSE_WAITING};
