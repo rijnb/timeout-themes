@@ -173,7 +173,9 @@
           diveProgress: 0,
           diveStartX: 0, diveStartY: 0,
           diveTargetX: 0, diveTargetY: 0,
-          diveReturnX: 0, diveReturnY: 0
+          diveReturnX: 0, diveReturnY: 0,
+          legPhase: Math.random() * Math.PI * 2,
+          legSpeed: (2 * Math.PI) / (800 + Math.random() * 1600) // period 0.8s–2.4s
         });
       }
     }
@@ -186,15 +188,8 @@
     let gridTargetVelocity = 0;   // desired velocity — gridVelocity lerps toward this
     let bounceCount = 0;   // total wall bounces so far
     const DROP_EVERY = 3;  // drop only every Nth bounce
-    let spriteFrameTimer = 0;
-    let spriteFrame = 0;
-
     function updateEnemies(delta) {
-      spriteFrameTimer += delta;
-      if (spriteFrameTimer > 500) {
-        spriteFrame = 1 - spriteFrame;
-        spriteFrameTimer = 0;
-      }
+      enemies.forEach(e => { if (e.alive) e.legPhase += delta * e.legSpeed; });
 
       const alive = enemies.filter(e => e.alive && !e.diving);
       if (alive.length === 0) return;
@@ -247,11 +242,14 @@
     // Cache off-screen canvases for each sprite type/frame/color combo
     const spriteCache = {};
 
-    function getSpriteKey(type, frame, color) {
-      return type + frame + color;
+    const ANIM_STEPS = 8;
+
+    function getSpriteKey(type, legAnim, color) {
+      const step = Math.floor(((legAnim + 1) / 2) * ANIM_STEPS) % ANIM_STEPS;
+      return type + '_' + step + '_' + color;
     }
 
-    function createHiResSprite(type, frame, color, w, h) {
+    function createHiResSprite(type, legAnim, color, w, h) {
       const oc = document.createElement('canvas');
       oc.width = w * 2; oc.height = h * 2; // 2x for crisp rendering
       const c = oc.getContext('2d');
@@ -271,7 +269,7 @@
       c.shadowBlur = 8;
 
       if (type === 'A') { // Crab
-        const legSpread = frame === 0 ? 1 : -1;
+        const legSpread = legAnim;
         // Body
         const grad = c.createRadialGradient(cx, cy-2, 2, cx, cy-2, w*0.45);
         grad.addColorStop(0, bright);
@@ -318,7 +316,7 @@
           c.stroke();
         }
       } else if (type === 'B') { // Squid
-        const tentacleWave = frame === 0 ? 1 : -1;
+        const tentacleWave = legAnim;
         // Head (dome shape)
         const grad = c.createRadialGradient(cx, cy - 4, 2, cx, cy - 4, w * 0.4);
         grad.addColorStop(0, bright);
@@ -357,7 +355,7 @@
           c.stroke();
         }
       } else { // type C — Octopus
-        const wobble = frame === 0 ? 1 : -1;
+        const wobble = legAnim;
         // Rounded body
         const grad = c.createRadialGradient(cx, cy - 1, 3, cx, cy - 1, w * 0.44);
         grad.addColorStop(0, bright);
@@ -409,10 +407,13 @@
       return oc;
     }
 
-    function drawSprite(x, y, type, frame, color) {
-      const key = getSpriteKey(type, frame, color);
+    function drawSprite(x, y, type, legAnim, color) {
+      const key = getSpriteKey(type, legAnim, color);
       if (!spriteCache[key]) {
-        spriteCache[key] = createHiResSprite(type, frame, color, ENEMY_W, ENEMY_H);
+        // Use canonical legAnim for this discrete step so cache stays consistent
+        const step = Math.floor(((legAnim + 1) / 2) * ANIM_STEPS) % ANIM_STEPS;
+        const canonicalLegAnim = Math.cos((step / ANIM_STEPS) * Math.PI * 2);
+        spriteCache[key] = createHiResSprite(type, canonicalLegAnim, color, ENEMY_W, ENEMY_H);
       }
       const oc = spriteCache[key];
       ctx.drawImage(oc, 0, 0, oc.width, oc.height, x, y, ENEMY_W, ENEMY_H);
@@ -422,11 +423,11 @@
       // Draw non-diving enemies first, then diving enemies on top
       enemies.forEach(e => {
         if (!e.alive || e.diving) return;
-        drawSprite(e.x + gridX, e.y + gridY, e.type, spriteFrame, spriteColor(e.type, e.row));
+        drawSprite(e.x + gridX, e.y + gridY, e.type, Math.sin(e.legPhase), spriteColor(e.type, e.row));
       });
       enemies.forEach(e => {
         if (!e.alive || !e.diving) return;
-        drawSprite(e.x, e.y, e.type, spriteFrame, spriteColor(e.type, e.row));
+        drawSprite(e.x, e.y, e.type, Math.sin(e.legPhase), spriteColor(e.type, e.row));
       });
     }
 
