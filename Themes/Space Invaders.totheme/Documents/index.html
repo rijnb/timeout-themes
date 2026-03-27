@@ -466,6 +466,7 @@
     }
 
     function updatePlayer(delta, elapsed) {
+      if (playerHit.active) return;
       const playerCX = player.x + PLAYER_W / 2;
       let threatened = false;
       const EVASION_ZONE = ENEMY_W * 2 + PLAYER_W; // wide detection zone for divers
@@ -674,6 +675,31 @@
     function renderPlayer() {
       if (gamePhase === 'gameover') return;
 
+      if (playerHit.active) {
+        const t = playerHit.timer;
+        if (t < 3000) return; // ship is destroyed, hide it
+
+        // Respawn slide: ship enters from below (3000–4000ms)
+        let renderY = player.y;
+        if (t < 4000) {
+          const progress = (t - 3000) / 1000;
+          const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+          renderY = (H + 30) + (player.y - (H + 30)) * eased;
+        }
+
+        // Invulnerability flicker: alternate visible/hidden every 100ms (3000–4500ms)
+        if (Math.floor(t / 100) % 2 === 1) return;
+
+        const color = COLOR_PLAYER;
+        if (!playerCache[color]) {
+          playerCache[color] = createHiResPlayer(color, PLAYER_W, PLAYER_H);
+        }
+        const oc = playerCache[color];
+        ctx.drawImage(oc, 0, 0, oc.width, oc.height, player.x, renderY, PLAYER_W, PLAYER_H);
+        return;
+      }
+
+      // Normal rendering
       const color = (rechargeTimer > 0) ? '#4488ff' : COLOR_PLAYER;
       if (!playerCache[color]) {
         playerCache[color] = createHiResPlayer(color, PLAYER_W, PLAYER_H);
@@ -792,6 +818,7 @@
 
     function updateBullets(delta, elapsed) {
       if (gamePhase !== 'playing') return;
+      if (playerHit.active) return;
 
       const aliveEnemies = enemies.filter(e => e.alive);
       const enemiesAliveCount = aliveEnemies.length;
