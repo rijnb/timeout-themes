@@ -577,12 +577,18 @@
         playerVelocity += (desiredV - playerVelocity) * Math.min(1, delta / 350);
         player.x += playerVelocity * (delta / 1000);
       } else {
-        // Ease-out: smoothly decelerate to stop
-        playerVelocity *= Math.max(0, 1 - delta / 250);
-        if (Math.abs(playerVelocity) < 3) {
+        // Ease-out: smoothly decelerate toward target
+        if (Math.abs(dx) < 2) {
+          // Close enough: snap cleanly to target
           playerVelocity = 0;
           player.x = player.targetX;
         } else {
+          // Maintain a minimum approach speed proportional to distance to avoid snapping
+          const minSpeed = Math.max(20, Math.abs(dx) * 1.5);
+          playerVelocity *= Math.max(0, 1 - delta / 250);
+          if (Math.abs(playerVelocity) < minSpeed) {
+            playerVelocity = Math.sign(dx) * minSpeed;
+          }
           player.x += playerVelocity * (delta / 1000);
         }
       }
@@ -702,12 +708,18 @@
       }
 
       // Normal rendering
-      const color = (rechargeTimer > 0) ? '#4488ff' : COLOR_PLAYER;
+      const isRecharging = rechargeTimer > 0;
+      const color = isRecharging ? '#111111' : COLOR_PLAYER;
       if (!playerCache[color]) {
         playerCache[color] = createHiResPlayer(color, PLAYER_W, PLAYER_H);
       }
       const oc = playerCache[color];
+      if (isRecharging) {
+        ctx.shadowColor = '#555555';
+        ctx.shadowBlur = 16;
+      }
       ctx.drawImage(oc, 0, 0, oc.width, oc.height, player.x, player.y, PLAYER_W, PLAYER_H);
+      if (isRecharging) ctx.shadowBlur = 0;
 
       // Recharge bar with gradient
       if (rechargeTimer > 0) {
