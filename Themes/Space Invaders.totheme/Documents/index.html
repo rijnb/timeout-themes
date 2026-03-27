@@ -186,10 +186,15 @@
     let gridTargetVelocity = 0;   // desired velocity — gridVelocity lerps toward this
     let bounceCount = 0;   // total wall bounces so far
     const DROP_EVERY = 3;  // drop only every Nth bounce
-    let legTime = 0;
+    let spriteFrameTimer = 0;
+    let spriteFrame = 0;
 
     function updateEnemies(delta) {
-      legTime += delta / 1000;
+      spriteFrameTimer += delta;
+      if (spriteFrameTimer > 500) {
+        spriteFrame = 1 - spriteFrame;
+        spriteFrameTimer = 0;
+      }
 
       const alive = enemies.filter(e => e.alive && !e.diving);
       if (alive.length === 0) return;
@@ -242,7 +247,11 @@
     // Cache off-screen canvases for each sprite type/frame/color combo
     const spriteCache = {};
 
-    function createHiResSprite(type, color, w, h) {
+    function getSpriteKey(type, frame, color) {
+      return type + frame + color;
+    }
+
+    function createHiResSprite(type, frame, color, w, h) {
       const oc = document.createElement('canvas');
       oc.width = w * 2; oc.height = h * 2; // 2x for crisp rendering
       const c = oc.getContext('2d');
@@ -262,6 +271,7 @@
       c.shadowBlur = 8;
 
       if (type === 'A') { // Crab
+        const legSpread = frame === 0 ? 1 : -1;
         // Body
         const grad = c.createRadialGradient(cx, cy-2, 2, cx, cy-2, w*0.45);
         grad.addColorStop(0, bright);
@@ -282,7 +292,33 @@
         c.arc(cx - 6, cy - 5, 2, 0, Math.PI * 2);
         c.arc(cx + 8, cy - 5, 2, 0, Math.PI * 2);
         c.fill();
+        // Claws/antennae
+        c.shadowBlur = 4;
+        c.strokeStyle = color;
+        c.lineWidth = 2.5;
+        c.lineCap = 'round';
+        c.beginPath();
+        c.moveTo(cx - 14, cy - 8);
+        c.lineTo(cx - 18, cy - 16 + legSpread * 3);
+        c.lineTo(cx - 14, cy - 14 + legSpread * 2);
+        c.moveTo(cx + 14, cy - 8);
+        c.lineTo(cx + 18, cy - 16 + legSpread * 3);
+        c.lineTo(cx + 14, cy - 14 + legSpread * 2);
+        c.stroke();
+        // Legs
+        c.lineWidth = 2;
+        for (let i = -1; i <= 1; i += 2) {
+          c.beginPath();
+          c.moveTo(cx + i * 10, cy + 6);
+          c.lineTo(cx + i * 14, cy + 12 + legSpread * i * 2);
+          c.stroke();
+          c.beginPath();
+          c.moveTo(cx + i * 5, cy + 7);
+          c.lineTo(cx + i * 8, cy + 13 - legSpread * i * 2);
+          c.stroke();
+        }
       } else if (type === 'B') { // Squid
+        const tentacleWave = frame === 0 ? 1 : -1;
         // Head (dome shape)
         const grad = c.createRadialGradient(cx, cy - 4, 2, cx, cy - 4, w * 0.4);
         grad.addColorStop(0, bright);
@@ -306,7 +342,22 @@
         c.arc(cx - 5, cy - 4, 1.8, 0, Math.PI * 2);
         c.arc(cx + 7, cy - 4, 1.8, 0, Math.PI * 2);
         c.fill();
+        // Tentacles
+        c.shadowBlur = 4;
+        c.strokeStyle = color;
+        c.lineWidth = 2.2;
+        c.lineCap = 'round';
+        const tentCount = 4;
+        for (let i = 0; i < tentCount; i++) {
+          const tx = cx - 10 + i * 7;
+          const wave = tentacleWave * (i % 2 === 0 ? 3 : -3);
+          c.beginPath();
+          c.moveTo(tx, cy + 2);
+          c.quadraticCurveTo(tx + wave, cy + 9, tx + wave * 0.5, cy + 14);
+          c.stroke();
+        }
       } else { // type C — Octopus
+        const wobble = frame === 0 ? 1 : -1;
         // Rounded body
         const grad = c.createRadialGradient(cx, cy - 1, 3, cx, cy - 1, w * 0.44);
         grad.addColorStop(0, bright);
@@ -333,6 +384,19 @@
         c.beginPath();
         c.arc(cx, cy + 3, 4, 0, Math.PI);
         c.stroke();
+        // Tentacles (8 wavy legs)
+        c.shadowBlur = 3;
+        c.strokeStyle = color;
+        c.lineWidth = 2;
+        c.lineCap = 'round';
+        for (let i = 0; i < 5; i++) {
+          const tx = cx - 14 + i * 7;
+          const wave = wobble * (i % 2 === 0 ? 4 : -4);
+          c.beginPath();
+          c.moveTo(tx, cy + 7);
+          c.quadraticCurveTo(tx + wave, cy + 13, tx + wave * 1.2, cy + 14);
+          c.stroke();
+        }
       }
 
       // Highlight spot on body
@@ -345,96 +409,24 @@
       return oc;
     }
 
-    function drawSprite(x, y, type, color, gridBaseX) {
-      const key = type + color;
+    function drawSprite(x, y, type, frame, color) {
+      const key = getSpriteKey(type, frame, color);
       if (!spriteCache[key]) {
-        spriteCache[key] = createHiResSprite(type, color, ENEMY_W, ENEMY_H);
+        spriteCache[key] = createHiResSprite(type, frame, color, ENEMY_W, ENEMY_H);
       }
       const oc = spriteCache[key];
       ctx.drawImage(oc, 0, 0, oc.width, oc.height, x, y, ENEMY_W, ENEMY_H);
-      drawLegs(x, y, type, color, gridBaseX);
-    }
-
-    function drawLegs(x, y, type, color, gridBaseX) {
-      const cx = x + ENEMY_W / 2;
-      const cy = y + ENEMY_H / 2;
-      const t = legTime;
-      // Phase based on fixed column position (gridBaseX = e.x, doesn't move with the grid)
-      const alienPhase = (gridBaseX * 0.07) % (Math.PI * 2);
-
-      ctx.save();
-      ctx.strokeStyle = color;
-      ctx.lineCap = 'round';
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 4;
-
-      if (type === 'A') { // Crab: 2 claws + 4 legs, all independent
-        ctx.lineWidth = 2.5;
-        // Left claw
-        const lc = Math.sin(t * 3 + alienPhase) * 3;
-        ctx.beginPath();
-        ctx.moveTo(cx - 14, cy - 8);
-        ctx.lineTo(cx - 18, cy - 16 + lc);
-        ctx.lineTo(cx - 14, cy - 14 + lc * 0.67);
-        ctx.stroke();
-        // Right claw (offset by π for alternating motion)
-        const rc = Math.sin(t * 3 + alienPhase + Math.PI) * 3;
-        ctx.beginPath();
-        ctx.moveTo(cx + 14, cy - 8);
-        ctx.lineTo(cx + 18, cy - 16 + rc);
-        ctx.lineTo(cx + 14, cy - 14 + rc * 0.67);
-        ctx.stroke();
-        // 4 legs with evenly-spaced phases (quarter-cycle apart)
-        ctx.lineWidth = 2;
-        const phases = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2];
-        // Left outer
-        const lo = Math.sin(t * 4 + alienPhase + phases[0]) * 2;
-        ctx.beginPath(); ctx.moveTo(cx - 10, cy + 6); ctx.lineTo(cx - 14, cy + 12 + lo); ctx.stroke();
-        // Left inner
-        const li = Math.sin(t * 4 + alienPhase + phases[1]) * 2;
-        ctx.beginPath(); ctx.moveTo(cx - 5, cy + 7); ctx.lineTo(cx - 8, cy + 13 + li); ctx.stroke();
-        // Right inner
-        const ri = Math.sin(t * 4 + alienPhase + phases[2]) * 2;
-        ctx.beginPath(); ctx.moveTo(cx + 5, cy + 7); ctx.lineTo(cx + 8, cy + 13 + ri); ctx.stroke();
-        // Right outer
-        const ro = Math.sin(t * 4 + alienPhase + phases[3]) * 2;
-        ctx.beginPath(); ctx.moveTo(cx + 10, cy + 6); ctx.lineTo(cx + 14, cy + 12 + ro); ctx.stroke();
-      } else if (type === 'B') { // Squid: 4 tentacles, each with its own phase
-        ctx.lineWidth = 2.2;
-        for (let i = 0; i < 4; i++) {
-          const tx = cx - 10 + i * 7;
-          const phase = alienPhase + i * (Math.PI * 2 / 4);
-          const wave = Math.sin(t * 4 + phase) * 3;
-          ctx.beginPath();
-          ctx.moveTo(tx, cy + 2);
-          ctx.quadraticCurveTo(tx + wave, cy + 9, tx + wave * 0.5, cy + 14);
-          ctx.stroke();
-        }
-      } else { // type C — Octopus: 5 tentacles, each with its own phase
-        ctx.lineWidth = 2;
-        for (let i = 0; i < 5; i++) {
-          const tx = cx - 14 + i * 7;
-          const phase = alienPhase + i * (Math.PI * 2 / 5);
-          const wave = Math.sin(t * 3.5 + phase) * 4;
-          ctx.beginPath();
-          ctx.moveTo(tx, cy + 7);
-          ctx.quadraticCurveTo(tx + wave, cy + 13, tx + wave * 1.2, cy + 14);
-          ctx.stroke();
-        }
-      }
-
-      ctx.restore();
     }
 
     function renderEnemies() {
       // Draw non-diving enemies first, then diving enemies on top
       enemies.forEach(e => {
         if (!e.alive || e.diving) return;
-        drawSprite(e.x + gridX, e.y + gridY, e.type, spriteColor(e.type, e.row), e.x);
+        drawSprite(e.x + gridX, e.y + gridY, e.type, spriteFrame, spriteColor(e.type, e.row));
       });
       enemies.forEach(e => {
         if (!e.alive || !e.diving) return;
-        drawSprite(e.x, e.y, e.type, spriteColor(e.type, e.row), e.x);
+        drawSprite(e.x, e.y, e.type, spriteFrame, spriteColor(e.type, e.row));
       });
     }
 
@@ -1297,30 +1289,6 @@
     let gamePhase = 'playing';
     let gameOverTimer = 0;
 
-    // --- Player Hit / Lives System ---
-    let lives = 3;
-
-    let playerHit = {
-      active: false,
-      timer: 0,
-      x: 0,
-      y: 0
-    };
-
-    let scheduledHits = [];
-
-    function scheduleHits() {
-      const hit1Time = (25 + Math.random() * 45) * 1000; // 25–70s
-      const minHit2 = Math.max(90000, hit1Time + 40000);
-      const hit2Time = minHit2 + Math.random() * (150000 - minHit2); // 90–150s
-      const types = Math.random() < 0.5 ? ['bomb', 'diver'] : ['diver', 'bomb'];
-      scheduledHits = [
-        { time: hit1Time, type: types[0], triggered: false },
-        { time: hit2Time, type: types[1], triggered: false }
-      ];
-    }
-    scheduleHits();
-
     function checkPhase(delta) {
       const aliveEnemies = enemies.filter(e => e.alive);
       const aliveCount = aliveEnemies.length;
@@ -1407,7 +1375,7 @@
 
         // Bottom Left: Lives
         ctx.textAlign = 'left';
-        ctx.fillText('LIVES: ' + lives, 18, H - 26);
+        ctx.fillText('LIVES: 3', 18, H - 26);
       }
       ctx.shadowBlur = 0;
     }
