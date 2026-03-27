@@ -1174,7 +1174,8 @@
         }
       });
       const bx = player.x + PLAYER_W / 2;
-      bombs.push({ x: bx, y: Math.max(10, lowestY), frame: 0, frameTimer: 0, scripted: true });
+      const spawnY = Math.min(lowestY, player.y - 50); // ensure bomb starts above player
+      bombs.push({ x: bx, y: Math.max(10, spawnY), frame: 0, frameTimer: 0, scripted: true });
     }
 
     function updateBombs(delta) {
@@ -1193,7 +1194,7 @@
 
         // Scripted bomb: check if it has reached the player
         if (b.scripted && !playerHit.active) {
-          if (b.y >= player.y) {
+          if (b.y >= player.y && b.y <= player.y + PLAYER_H) {
             triggerPlayerDeath(player.x, player.y);
             return false; // remove bomb on hit
           }
@@ -1313,7 +1314,7 @@
           if (e.scripted && !playerHit.active) {
             const ddx = e.x - (player.x + PLAYER_W / 2);
             const ddy = e.y - (player.y + PLAYER_H / 2);
-            if (Math.sqrt(ddx * ddx + ddy * ddy) < 18) {
+            if (Math.sqrt(ddx * ddx + ddy * ddy) < 28) {
               triggerPlayerDeath(player.x, player.y);
               e.alive = false;
               e.diving = false;
