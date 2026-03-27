@@ -687,8 +687,8 @@
           renderY = (H + 30) + (player.y - (H + 30)) * eased;
         }
 
-        // Invulnerability flicker: alternate visible/hidden every 100ms (3000–4500ms)
-        if (Math.floor(t / 100) % 2 === 1) return;
+        // Invulnerability flicker: alternate visible/hidden every 100ms (4000–4500ms)
+        if (t >= 4000 && Math.floor(t / 100) % 2 === 1) return;
 
         const color = COLOR_PLAYER;
         if (!playerCache[color]) {
