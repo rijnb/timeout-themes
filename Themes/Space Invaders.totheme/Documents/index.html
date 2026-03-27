@@ -981,6 +981,23 @@
       explosions.push({ x, y, color: '#ff8800', timer: 0, duration: 3000, particles, large: true });
     }
 
+    function triggerPlayerDeath(px, py) {
+      lives--;
+      playerHit.active = true;
+      playerHit.timer = 0;
+      playerHit.x = px + PLAYER_W / 2;
+      playerHit.y = py + PLAYER_H / 2;
+      spawnPlayerExplosion(playerHit.x, playerHit.y);
+    }
+
+    function updatePlayerHit(delta) {
+      if (!playerHit.active) return;
+      playerHit.timer += delta;
+      if (playerHit.timer >= 4500) {
+        playerHit.active = false;
+      }
+    }
+
     function updateExplosions(delta) {
       const dt = delta / 1000;
       explosions = explosions.filter(e => {
@@ -1069,6 +1086,37 @@
 
         ctx.globalAlpha = 1;
       });
+    }
+
+    function renderPlayerHit() {
+      if (!playerHit.active) return;
+      const t = playerHit.timer;
+
+      // Screen flash: full-white overlay, fades 0–100ms
+      if (t < 100) {
+        ctx.globalAlpha = (1 - t / 100) * 0.75;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, W, H);
+        ctx.globalAlpha = 1;
+      }
+
+      // Lives message: blinks 500–2000ms
+      if (t >= 500 && t < 2000) {
+        const blinkCycle = Math.floor((t - 500) / 200);
+        if (blinkCycle % 2 === 0) {
+          const text = lives >= 2 ? '2 LIVES REMAINING' : '1 LIFE REMAINING';
+          ctx.font = 'bold 72px "Share Tech Mono", "Courier New", monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.shadowColor = '#ffffff';
+          ctx.shadowBlur = 35;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(text, W / 2, H / 2);
+          ctx.shadowBlur = 12;
+          ctx.fillText(text, W / 2, H / 2);
+          ctx.shadowBlur = 0;
+        }
+      }
     }
 
     // ─── Enemy Bombs ──────────────────────────────────────────────────────────
@@ -1482,6 +1530,18 @@
     let startTime = null;
 
     function update(delta, elapsed) {
+      // Check scheduled hits
+      if (gamePhase === 'playing') {
+        scheduledHits.forEach(hit => {
+          if (!hit.triggered && elapsed >= hit.time && !playerHit.active) {
+            hit.triggered = true;
+            if (hit.type === 'bomb') spawnScriptedBomb();
+            else spawnScriptedDiver();
+          }
+        });
+      }
+      updatePlayerHit(delta);
+
       if (gamePhase === 'playing') {
         updateEnemies(delta);
         updatePlayer(delta, elapsed);
@@ -1510,6 +1570,7 @@
       renderBombs();
       renderBullets();
       renderExplosions();
+      renderPlayerHit();
       renderPlayer();
       renderHUD(elapsed);
       renderScanlines();
