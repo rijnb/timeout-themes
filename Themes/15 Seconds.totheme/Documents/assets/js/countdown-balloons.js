@@ -7,7 +7,9 @@
     ];
 
     function injectStyles() {
+        if (document.getElementById('b-styles')) return;
         const style = document.createElement('style');
+        style.id = 'b-styles';
         style.textContent = `
             @keyframes b-sway {
                 0%   { transform: translateX(0) rotate(0deg); }
