@@ -1,4 +1,5 @@
 (function () {
+    const container = document.getElementById('countdown-container');
     const TOTAL_SECONDS = 15;
     const Z_SPACING = 1200;
     const X_SHIFT = -580;
@@ -112,7 +113,6 @@
     }
 
     window.startNeon = function () {
-        const container = document.getElementById('countdown-container');
         createNumbers();
         setTimeout(tick, 1000);
     };
