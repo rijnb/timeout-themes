@@ -112,12 +112,18 @@
 
         buildLanes(container);
 
+        // Shuffle traverse times so any animal can be fast or slow
+        const shuffled = traverseTimes.slice();
+        for (let k = shuffled.length - 1; k > 0; k--) {
+            const j = Math.floor(Math.random() * (k + 1));
+            [shuffled[k], shuffled[j]] = [shuffled[j], shuffled[k]];
+        }
+
         // Staggered entry: animal 15 enters at 1s, 14 at 2s, ..., 0 at 16s
-        // Each animal runs at its own speed — snail crawls, bee zooms
         for (let i = TOTAL_SECONDS; i >= 0; i--) {
             const laneIndex = TOTAL_SECONDS - i;
             const delay = (laneIndex + 1) * 1000;
-            setTimeout(() => runRacer(i, traverseTimes[laneIndex]), delay);
+            setTimeout(() => runRacer(i, shuffled[laneIndex]), delay);
         }
     };
 })();
