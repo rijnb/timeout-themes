@@ -1,2 +1,2 @@
-// Dispatcher — populated in Task 4
-window.startNeon && window.startNeon();
+// Temp: force balloons for testing
+window.startBalloons();
