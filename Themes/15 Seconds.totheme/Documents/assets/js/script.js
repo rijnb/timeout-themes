@@ -1,2 +1,2 @@
-// Temp: force balloons for testing
-window.startBalloons();
+// Temp: force animals for testing
+window.startAnimals();
