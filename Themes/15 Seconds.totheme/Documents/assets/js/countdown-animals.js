@@ -6,9 +6,13 @@
         '#0088ff', '#0000ff', '#4b0082', '#6a00ff', '#8b00ff', '#c000ff'
     ];
 
-    // Lane 0 (number 15) → slowest-looking; lane 15 (number 0) → fastest-looking
+    // Lane 0 (number 15) → slowest; lane 15 (number 0) → fastest
     const animals = ['🐌', '🐢', '🦔', '🐿️', '🐓', '🦆', '🐧', '🐻',
                      '🦒', '🐘', '🦊', '🐇', '🦁', '🐆', '🦅', '🐝'];
+
+    // Traverse time (ms) per lane — snail is very slow, bee/eagle zoom
+    const traverseTimes = [9000, 7500, 6000, 5000, 4500, 4200, 3800, 3500,
+                           3200, 3000, 2600, 2200, 1800, 1400, 1100, 900];
 
     function injectStyles() {
         if (document.getElementById('a-styles')) return;
@@ -82,11 +86,8 @@
         }
     }
 
-    // Animate a single racer across the screen (left to right)
-    // TRAVERSE_MS: time to cross the full viewport width
-    const TRAVERSE_MS = 3500;
-
-    function runRacer(number) {
+    // Animate a single racer across the screen at its own speed
+    function runRacer(number, traverseMs) {
         const racer = document.getElementById(`racer-${number}`);
         if (!racer) return;
 
@@ -96,7 +97,7 @@
         const startTime = performance.now();
 
         (function animate(now) {
-            const progress = Math.min((now - startTime) / TRAVERSE_MS, 1);
+            const progress = Math.min((now - startTime) / traverseMs, 1);
             racer.style.transform = `translateX(${startX + distance * progress}px)`;
             if (progress < 1) requestAnimationFrame(animate);
             else racer.remove();
@@ -112,9 +113,11 @@
         buildLanes(container);
 
         // Staggered entry: animal 15 enters at 1s, 14 at 2s, ..., 0 at 16s
+        // Each animal runs at its own speed — snail crawls, bee zooms
         for (let i = TOTAL_SECONDS; i >= 0; i--) {
-            const delay = (TOTAL_SECONDS - i + 1) * 1000;
-            setTimeout(() => runRacer(i), delay);
+            const laneIndex = TOTAL_SECONDS - i;
+            const delay = (laneIndex + 1) * 1000;
+            setTimeout(() => runRacer(i, traverseTimes[laneIndex]), delay);
         }
     };
 })();
