@@ -11,19 +11,18 @@
         const style = document.createElement('style');
         style.id = 'b-styles';
         style.textContent = `
-            @keyframes b-sway {
-                0%   { transform: translateX(0) rotate(0deg); }
-                25%  { transform: translateX(var(--sway)) rotate(2deg); }
-                75%  { transform: translateX(calc(var(--sway) * -1)) rotate(-2deg); }
-                100% { transform: translateX(0) rotate(0deg); }
+            @keyframes b-float {
+                0% { transform: translateY(0) translateX(0) rotate(0deg); }
+                25% { transform: translateY(-25vh) translateX(var(--sway)) rotate(2deg); }
+                75% { transform: translateY(-75vh) translateX(calc(var(--sway) * -1)) rotate(-2deg); }
+                100% { transform: translateY(-100vh) translateX(0) rotate(0deg); }
             }
             .b-wrap {
                 position: absolute;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                transition: top 0.9s ease-in-out;
-                animation: b-sway var(--dur) var(--delay) ease-in-out infinite;
+                animation: b-float var(--float-dur) var(--delay) linear forwards;
             }
             .b-body {
                 width: 64px;
@@ -59,14 +58,15 @@
             // Spread 16 balloons across 6% – 94% of viewport width
             const xPercent = 6 + (colorIndex / TOTAL_SECONDS) * 88;
             const swayPx = 10 + Math.floor(Math.random() * 11);
-            const dur = (2 + Math.random() * 2).toFixed(2);
+            const floatDur = 16 + Math.random() * 4;
             const delay = (Math.random() * 2).toFixed(2);
 
             wrap.style.left = `calc(${xPercent}% - 32px)`;
-            wrap.style.top = '12%';
+            wrap.style.bottom = '0%';
             wrap.style.setProperty('--sway', `${swayPx}px`);
-            wrap.style.setProperty('--dur', `${dur}s`);
+            wrap.style.setProperty('--float-dur', `${floatDur}s`);
             wrap.style.setProperty('--delay', `${delay}s`);
+            wrap.dataset.explosionTime = i;
 
             const body = document.createElement('div');
             body.className = 'b-body';
@@ -84,60 +84,93 @@
     }
 
     function popBalloon(wrap, color) {
-        // Stop swaying
-        wrap.style.animation = 'none';
-        wrap.style.transition = 'transform 0.1s ease-out';
-        wrap.style.transform = 'scale(1.3)';
-
-        setTimeout(() => {
-            wrap.style.transition = 'transform 0.15s ease-in, opacity 0.15s ease-in';
-            wrap.style.transform = 'scale(0)';
-            wrap.style.opacity = '0';
-            setTimeout(() => wrap.remove(), 160);
-        }, 100);
-
-        // Emit 7 particles from the balloon centre
-        const rect = wrap.getBoundingClientRect();
+        // Get the explosion position BEFORE changing animation
+        const body = wrap.querySelector('.b-body');
+        const rect = body.getBoundingClientRect();
         const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height * 0.35;
-        const count = 7;
+        const cy = rect.top + rect.height / 2;
 
-        for (let p = 0; p < count; p++) {
-            const angle = (p / count) * Math.PI * 2;
-            const dist = 40 + Math.random() * 40;
+        // Immediately hide the balloon
+        wrap.style.display = 'none';
+
+        // First wave: 30 particles in all directions
+        const primaryCount = 30;
+        for (let p = 0; p < primaryCount; p++) {
+            const angle = (p / primaryCount) * Math.PI * 2;
+            const dist = 80 + Math.random() * 120;
             const dx = Math.cos(angle) * dist;
             const dy = Math.sin(angle) * dist;
+            const size = 4 + Math.random() * 8;
+            const rotation = Math.random() * 360;
 
             const particle = document.createElement('div');
             particle.style.cssText = `
                 position: fixed;
-                width: 8px;
-                height: 8px;
+                width: ${size}px;
+                height: ${size}px;
                 border-radius: 50%;
                 background: ${color};
                 pointer-events: none;
-                left: ${cx - 4}px;
-                top: ${cy - 4}px;
+                left: ${cx - size/2}px;
+                top: ${cy - size/2}px;
+                box-shadow: 0 0 ${size * 1.5}px ${color};
             `;
             document.body.appendChild(particle);
 
             const start = performance.now();
             (function animateParticle(now) {
-                const progress = Math.min((now - start) / 500, 1);
-                const eased = 1 - Math.pow(1 - progress, 2);
-                particle.style.transform = `translate(${dx * eased}px, ${dy * eased}px)`;
-                particle.style.opacity = `${1 - progress}`;
+                const progress = Math.min((now - start) / 800, 1);
+                const eased = 1 - Math.pow(1 - progress, 1.5);
+                const falloff = Math.max(0, 1 - progress * 0.5);
+                particle.style.transform = `translate(${dx * eased}px, ${dy * eased + 30 * progress * progress}px) rotate(${rotation * progress}deg) scale(${falloff})`;
+                particle.style.opacity = `${Math.max(0, 1 - progress)}`;
                 if (progress < 1) requestAnimationFrame(animateParticle);
                 else particle.remove();
             })(performance.now());
         }
+
+        // Second wave: glow particles for extra drama
+        setTimeout(() => {
+            const secondaryCount = 15;
+            for (let p = 0; p < secondaryCount; p++) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 40 + Math.random() * 80;
+                const dx = Math.cos(angle) * dist;
+                const dy = Math.sin(angle) * dist;
+
+                const particle = document.createElement('div');
+                particle.style.cssText = `
+                    position: fixed;
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 50%;
+                    background: ${color};
+                    pointer-events: none;
+                    left: ${cx - 6}px;
+                    top: ${cy - 6}px;
+                    box-shadow: 0 0 20px ${color}, inset 0 0 10px rgba(255,255,255,0.6);
+                    opacity: 0.8;
+                `;
+                document.body.appendChild(particle);
+
+                const start = performance.now();
+                (function animateParticle(now) {
+                    const progress = Math.min((now - start) / 600, 1);
+                    const eased = 1 - Math.pow(1 - progress, 2);
+                    particle.style.transform = `translate(${dx * eased}px, ${dy * eased}px) scale(${1 - progress})`;
+                    particle.style.opacity = `${0.8 * (1 - progress)}`;
+                    if (progress < 1) requestAnimationFrame(animateParticle);
+                    else particle.remove();
+                })(performance.now());
+            }
+        }, 60);
     }
 
     window.startBalloons = function () {
         injectStyles();
 
         const container = document.getElementById('countdown-container');
-        container.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;';
+        container.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;overflow:hidden;';
 
         createBalloons(container);
 
@@ -150,11 +183,6 @@
             if (wrap) popBalloon(wrap, rainbowColors[TOTAL_SECONDS - current]);
 
             current--;
-
-            // Remaining balloons drift down ~3.5% each tick
-            container.querySelectorAll('.b-wrap').forEach(el => {
-                el.style.top = `${parseFloat(el.style.top) + 3.5}%`;
-            });
 
             if (current >= 0) setTimeout(tick, 1000);
         }
